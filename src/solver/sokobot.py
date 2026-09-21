@@ -102,8 +102,8 @@ def printGrid(grid):
 class State:
     #Constructor Method, boxes contain the coordinates of the boxes and playerAccess contains the area the player can access without any pushes
     def __init__(self, boxes, playerAccess):
-        self.boxes = boxes
-        self.playerAccess = playerAccess
+        self.boxes = frozenset(boxes)
+        self.playerAccess = tuple(map(tuple,playerAccess))
 
     #Equality Override, States are equal if they have the same set of Boxes and PlayerAccess
     def __eq__(self, other):
