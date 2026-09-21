@@ -1,6 +1,18 @@
 import time
 from collections import deque
 
+#TO DO:
+#Get a way to generate actions from a state
+#Make an algorithm to explore actions
+#Make a way to generate the resulting state
+#Make a way to end the search early for deadend states
+
+#Ideas to make it faster
+#Switch to bits (I will be making an alt file converting things to a bitboard to check the performance, if yall don't wanna deal with that, you can continue working here and I will just convert new methods over there)
+#Get a better floodfill algorithm or
+#Get a better method for checking what boxes a player can access or
+#Find a way to update the playerAccess grid when moving from one state to another
+#Find better algorithms than bfs (maybe some heuristics that could prioritize better paths? maybe we could look up normal sokoban strats or smthn)
 
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
@@ -104,8 +116,3 @@ class State:
     #Hash Override, sets the hash to use the tuple of box coordinates and player access.
     def __hash__(self):
         return hash((self.boxes,self.playerAccess))
-
-#Ideas to make it faster
-#Switch to bits (I will be making an alt file converting things to a bitboard to check the performance, if yall don't wanna deal with that, you can continue working here and I will just convert new methods over there)
-#Get a better floodfill algorithm or
-#Get a better method for checking what boxes a player can access
