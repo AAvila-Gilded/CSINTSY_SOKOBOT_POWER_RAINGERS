@@ -135,41 +135,35 @@ def getActions(width, height, currentState, walls):
             newBoxes = set(currentState.boxes)
             newBoxes.add(up)
             newBoxes.remove(box)
-            stateQueue.append(createState(box, width, height, walls, newBoxes))
+            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
         if accessible[up[0][0]][up[0][1]] and down[0] not in blocked:
             newBoxes = set(currentState.boxes)
             newBoxes.add(down)
             newBoxes.remove(box)
-            stateQueue.append(createState(box, width, height, walls, newBoxes))
+            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
         if accessible[right[0][0]][right[0][1]] and left[0] not in blocked:
             newBoxes = set(currentState.boxes)
             newBoxes.add(left)
             newBoxes.remove(box)
-            stateQueue.append(createState(box, width, height, walls, newBoxes))
+            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
         if accessible[left[0][0]][left[0][1]] and right[0] not in blocked:
             newBoxes = set(currentState.boxes)
             newBoxes.add(right)
             newBoxes.remove(box)
-            stateQueue.append(createState(box, width, height, walls, newBoxes))
+            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
         
-       
-        
-        
-        #Check if generated state has been a state before
-        # for state in stateQueue:
-        #     if state != childState:
-        #         stateQueue.append(childState)
-
     
     return stateQueue
 
-def createState(newPlayerPos, width, height, walls, newBoxes):
+def createState(stateQueue, newPlayerPos, width, height, walls, newBoxes):
     newPlayerAccess = getAccessibleArea(width, height, newPlayerPos, walls, newBoxes)
     childState = State(newBoxes, newPlayerAccess)
     print("newboxes:")
     print(newBoxes)
     
-    return childState
+    #Check if generated state has been a state before
+    if childState not in stateQueue:
+        return childState
 
 #For testing
 def printGrid(grid):
