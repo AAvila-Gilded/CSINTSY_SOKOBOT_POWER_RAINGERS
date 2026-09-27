@@ -43,13 +43,18 @@ class SokoBot:
             goal = State(targets, playerAccess)
 
             #Make something to generate possible moves from initial state
+            #Make something to generate new state
             print("currentplayerpos: ")
             print(player)
             print("currentboxpos: " )
             print(boxes)
-            getActions(width, height, initial, walls)
-            print("getactionshouldbedone")
-            #Make something to generate new state
+            stateQueue = getActions(width, height, initial, walls)
+            for state in stateQueue:
+                if state == goal:
+                    print("Goal Reached")
+
+            #Execute the move from the possible states
+            
 
             #Make hashset equals override for the state
 
@@ -90,11 +95,12 @@ def getAccessibleArea(width, height, playerPos, walls, boxes):
 
     return grid
 
-def getActions(currentState, walls):
-    stateQueue = deque()
-    stateQueue.append(currentState)
+def getActions(width, height, currentState, walls):
+    stateQueue = []
+    
     blocked = walls.union(currentState.boxes)
-    newBoxes = set()
+    newBoxes = set(currentState.boxes)
+    accessible = currentState.playerAccess
     
     for box in currentState.boxes:
         print()
@@ -104,24 +110,38 @@ def getActions(currentState, walls):
         down = (box[0]+1, box[1])
         left = (box[0], box[1]-1)
         right = (box[0], box[1]+1)
-        
-        print("directions:")
-        
-        if up not in blocked and currentState.playerAccess[down[0]][down[1]]:
+                
+        #The accesible coordinates is the position beside the box at the opposite direction of the push
+        #Up push means check if accesible from the free position at down of the box
+        if accessible[down[0]][down[1]] and up not in blocked:
             newBoxes.add(up)
-            print(up)
-        if down not in blocked and currentState.playerAccess[up[0]][down[1]]:
+            newBoxes.remove(box)
+        if accessible[up[0]][up[1]] and down not in blocked:
             newBoxes.add(down)
-            print(down)
-        if left not in blocked and currentState.playerAccess[right[0]][down[1]]:
+            newBoxes.remove(box)
+        if accessible[right[0]][right[1]] and left not in blocked:
             newBoxes.add(left)
-            print(left)
-        if right not in blocked and currentState.playerAccess[left[0]][down[1]]:
+            newBoxes.remove(box)
+        if accessible[left[0]][left[1]] and right not in blocked:
             newBoxes.add(right)
-            print(right)     
+            newBoxes.remove(box)
 
-    print(newBoxes)
-
+        #Generate the new state with the new box positions and the player access
+        newPlayerPos = box #Initial pos of the box
+        newPlayerAccess = getAccessibleArea(width, height, newPlayerPos, walls, newBoxes)
+        print("new boxes:")
+        print(newBoxes)
+        print("newplayeraccess:")
+        printGrid(newPlayerAccess)
+        childState = State(newBoxes, newPlayerAccess)
+        
+        #Check if generated state has been a state before
+        for state in stateQueue:
+            if state != childState:
+                stateQueue.append(childState)
+    
+    
+    return stateQueue
 
 #For testing
 def printGrid(grid):
