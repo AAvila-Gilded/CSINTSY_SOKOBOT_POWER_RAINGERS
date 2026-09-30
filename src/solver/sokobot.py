@@ -1,4 +1,5 @@
 import time
+from .helperStructures import State, Direction
 from collections import deque
 
 #TO DO:
@@ -35,43 +36,41 @@ class SokoBot:
                         targets.add((row,col))
 
             #Gets the initial area the player can access without pushing
-            #Flood fill algorithm, could find a faster one
-            playerAccess = getAccessibleArea(width, height, player, walls, boxes)
-            
+            playerAccess = getAccessibleArea(width, height, walls, boxes, player)   #Flood fill algorithm, could find a faster one
             #Initializes the Initial State and the Goal State
             initial = State(boxes, playerAccess)
             goal = State(targets, playerAccess)
 
-            #Make something to generate possible moves from initial state
-            #Make something to generate new state
-            print("initial player pos: ")
-            print(player)
-            print("initial box pos': " )
-            print(boxes)
-            stateQueue = getActions(width, height, initial, walls)
-            print()
-            print("After getting possible actions:")
-            print(f"\nFound {len(stateQueue)} successor(s):")
-            for i, state in enumerate(stateQueue):
-                print(f"  Successor {i+1}:")
-                print(f"    Boxes: {state.boxes}")
-            
-            
-            for state in stateQueue:
-                if state == goal:
+            #We are NOT using a list for the frontier, but for now i am doing this as I can't think
+            frontier = []
+            explored = set()
+            frontier.append(initial)
+            while frontier:
+                #Grab the highest priority frontier state
+                exploring = frontier[0]
+
+                #Check if what is being explored is the goal
+                if exploring.areBoxesEqual(goal):
                     print("Goal Reached")
+                    break
 
-            #Execute the move from the possible states
-            
+                #Get the list of actions from this state
+                actionSet = getActions(width, height, walls, exploring)
+                #Generate every new State and add it to frontier
+                for action in actionSet:
+                    newState = createState(width, height, walls, exploring, action)
+                    if (newState not in explored):
+                        frontier.append(newState)
 
-            #Make hashset equals override for the state
+                explored.add(exploring)
+                frontier.pop(0)
 
         except Exception as ex:
             print(ex)
         return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
 
 #Floodfill algorithm to check the player's access area, currently just using BFS
-def getAccessibleArea(width, height, playerPos, walls, boxes):
+def getAccessibleArea(width, height, walls, boxes, playerPos):
     #Initializes an empty map
     grid = [[0 for x in range(width)] for y in range(height)]
     explored = set()
@@ -103,67 +102,49 @@ def getAccessibleArea(width, height, playerPos, walls, boxes):
 
     return grid
 
-def getActions(width, height, currentState, walls):
-    stateQueue = []
-    
+def getActions(width, height, walls, currentState):
+    actionSet = set()
+
     blocked = walls.union(currentState.boxes)
-    
     accessible = currentState.playerAccess
     
     for box in currentState.boxes:
-        print()
-        print("currentbox being eval:")
-        print(box)
-        up = (
-            (box[0]-1, box[1]), 
-            "UP")
-        down = (
-            (box[0]+1, box[1]),
-            "DOWN"
-        )
-        left = (
-            (box[0], box[1]-1),
-            "LEFT"
-        )
-        right = (
-            (box[0], box[1]+1),
-            "RIGHT"
-        )
+        up = (box[0]-1, box[1])
+        down = (box[0]+1, box[1])
+        left = (box[0], box[1]-1)
+        right = (box[0], box[1]+1)
         #The accesible coordinates is the position beside the box at the opposite direction of the push
         #Up push means check if accesible from the free position at down of the box
-        if accessible[down[0][0]][down[0][1]] and up[0] not in blocked:
-            newBoxes = set(currentState.boxes)
-            newBoxes.add(up)
-            newBoxes.remove(box)
-            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
-        if accessible[up[0][0]][up[0][1]] and down[0] not in blocked:
-            newBoxes = set(currentState.boxes)
-            newBoxes.add(down)
-            newBoxes.remove(box)
-            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
-        if accessible[right[0][0]][right[0][1]] and left[0] not in blocked:
-            newBoxes = set(currentState.boxes)
-            newBoxes.add(left)
-            newBoxes.remove(box)
-            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
-        if accessible[left[0][0]][left[0][1]] and right[0] not in blocked:
-            newBoxes = set(currentState.boxes)
-            newBoxes.add(right)
-            newBoxes.remove(box)
-            stateQueue.append(createState(stateQueue, box, width, height, walls, newBoxes))
-        
-    
-    return stateQueue
 
-def createState(stateQueue, newPlayerPos, width, height, walls, newBoxes):
-    newPlayerAccess = getAccessibleArea(width, height, newPlayerPos, walls, newBoxes)
-    childState = State(newBoxes, newPlayerAccess)
-    print("newboxes:")
-    print(newBoxes)
+        #Up Push
+        if accessible[box[0] + 1][box[1]] and up not in blocked:
+            actionSet.add((box,Direction.UP))
+        #Down Push
+        if accessible[box[0] - 1][box[1]] and down not in blocked:
+            actionSet.add((box,Direction.DOWN))
+        #Left Push
+        if accessible[box[0]][box[1]+1] and left not in blocked:
+            actionSet.add((box,Direction.LEFT))
+        #Right Push
+        if accessible[box[0]][box[1]-1] and right not in blocked:
+            actionSet.add((box,Direction.RIGHT))
     
-    #Check if generated state has been a state before
-    if childState not in stateQueue:
-        return childState
+    return actionSet
+
+def createState(width, height, walls, exploring, action):
+    boxes = set(exploring.boxes)
+    target = action[0]
+    direction = action[1]
+
+    boxes.remove(target)
+    boxes.add((target[0] + direction.row, target[1] + direction.column))
+
+    #Player should be standing in the opposite direction of where they pushed the box, so we can call the search here
+    player = (target[0] - direction.row, target[1] - direction.column)
+
+    playerAccess = getAccessibleArea(width, height, walls, boxes, player)   #Flood fill algorithm, could find a faster one
+
+    return State(boxes,playerAccess)
 
 #For testing
 def printGrid(grid):
@@ -171,23 +152,3 @@ def printGrid(grid):
         for y in range(len(grid[x])):
             print(grid[x][y], end="")
         print()
-
-
-#Extra Objects
-class State:
-    #Constructor Method, boxes contain the coordinates of the boxes and playerAccess contains the area the player can access without any pushes
-    def __init__(self, boxes, playerAccess):
-        self.boxes = frozenset(boxes)
-        self.playerAccess = tuple(map(tuple,playerAccess))
-
-    #Equality Override, States are equal if they have the same set of Boxes and PlayerAccess
-    def __eq__(self, other):
-        return self.boxes == other.boxes and self.playerAccess == other.playerAccess
-
-    #A function to check if the current state has the same box positions as another state. For testing if its equal to the goal state as the current player position is unimportant here
-    def areBoxesEqual(self, other):
-        return self.boxes == other.boxes
-
-    #Hash Override, sets the hash to use the tuple of box coordinates and player access.
-    def __hash__(self):
-        return hash((self.boxes,self.playerAccess))
