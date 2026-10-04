@@ -70,6 +70,17 @@ class SokoBot:
         return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
 
 #Floodfill algorithm to check the player's access area, currently just using BFS
+#Prints out 1 and 0 whether a space is occupied or not
+#This is used to generate possible actions by checking if a box is within the range of the accesible area
+#Example Grid:
+"""
+00000000
+00111110
+00000010
+00000010
+00000000
+"""
+#In the grid above, the 1s represent the spaces the bot can move into and the 0 either represents a wall or a box
 def getAccessibleArea(width, height, walls, boxes, playerPos):
     #Initializes an empty map
     grid = [[0 for x in range(width)] for y in range(height)]
@@ -102,6 +113,22 @@ def getAccessibleArea(width, height, walls, boxes, playerPos):
 
     return grid
 
+#This returns the possible actions based on the accessible area
+#It checks the coordinates of each box and checks if those coordinates are within the range of the accesible area
+#Using the example grid from getAccessibleArea:
+"""
+00000000
+00111110
+00200010
+00000010
+00000000
+"""
+#For the sake of representation, 2 is the box which is at coordinates (2,2) (stored in currentState.boxes)
+#It will first check the possible area(up, down, left, right) that the boxed can be moved into using blocked
+#If the area is not blocked, it will then use accesible area to check if that box can be moved from the opposite direction of the movement.
+#Ex: The down coordinates of the box is free/not blocked. Since the accessible area has 1 on the up of the box, this means that pushing the box
+#downwards is indeed a valid movement
+#This movement is then added to the actionSet which is all the possible actions from this current state
 def getActions(width, height, walls, currentState):
     actionSet = set()
 
@@ -116,7 +143,7 @@ def getActions(width, height, walls, currentState):
         #The accesible coordinates is the position beside the box at the opposite direction of the push
         #Up push means check if accesible from the free position at down of the box
 
-        #Up Push
+        #Up Push. box[0] + 1][box[1] is the coordinates of down. same with the other directions
         if accessible[box[0] + 1][box[1]] and up not in blocked:
             actionSet.add((box,Direction.UP))
         #Down Push
