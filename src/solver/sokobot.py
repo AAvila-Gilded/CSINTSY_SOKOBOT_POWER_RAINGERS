@@ -1,4 +1,4 @@
-import time
+import time, heapq
 from .helperStructures import State, Direction
 from collections import deque
 
@@ -41,33 +41,130 @@ class SokoBot:
             initial = State(boxes, playerAccess)
             goal = State(targets, playerAccess)
 
-            #We are NOT using a list for the frontier, but for now i am doing this as I can't think
-            frontier = []
-            explored = set()
-            frontier.append(initial)
-            while frontier:
-                #Grab the highest priority frontier state
-                exploring = frontier[0]
+            # push sequence - the sequence of pushes from the start to the goal
+            pushSeq = Astar(width,height,walls,initial,goal,targets)
+            """
+            pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
+            Output format is such: [((row, col), Direction)]
+                (row,col) = represents the coordinates of the box being pushed
+                Direction = the direction of the push
+            
+            Example using resulting list from testlevel:
+                pushSeq = [ ((3,4), Direction.LEFT), 
+                            ((3,3), Direction.LEFT),
+                            ((3,2), Direction.LEFT),
+                            ((2,2), Direction.DOWN),
+                            ((2,3), Direction.UP),
+                            ((2,4), Direction.DOWN),
+                            ((1,3), Direction.RIGHT)
+                          ]
+                Description:
+                1. Push box at 3,4 to the left
+                2. Push box at 3,3 to the left (target)
+                3. Push box at 3,2 to the left (final target)
+                4. Push box at 2,2 down (final target)
+                5. Push box at 2,3 up
+                6. Push box at 2,4 down (final target)
+                7. Push box at 1,3 to the right (final target)
+            """
 
-                #Check if what is being explored is the goal
-                if exploring.areBoxesEqual(goal):
-                    print("Goal Reached")
-                    break
-
-                #Get the list of actions from this state
-                actionSet = getActions(width, height, walls, exploring)
-                #Generate every new State and add it to frontier
-                for action in actionSet:
-                    newState = createState(width, height, walls, exploring, action)
-                    if (newState not in explored):
-                        frontier.append(newState)
-
-                explored.add(exploring)
-                frontier.pop(0)
+            print(*pushSeq)
 
         except Exception as ex:
             print(ex)
         return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
+
+# Start of A* stuff
+class Node:
+    """Class representing a node."""
+    def __init__(self,state,parent=None,push=None):
+        """Initialize the node with its state, parent, and push"""
+        self.state = state      # state in the node
+        self.parent = parent    # parent node
+        self.push = push        # push that lead to this node
+
+        self.cost = 0           # cost: box pushes made so far
+        self.heuristic = 0      # heuristic: manhattan distance of boxes to targets
+        self.total = 0          # cost and heuristic total 
+
+    def __lt__(self,other):
+        # Tie-breaking rule for the priority queue based on total
+        return self.total < other.total
+
+    
+def totalManhattanDist(state,targets):
+    """
+    The sum of the manhattan distance of each box to its nearest target.
+    In order to get an estimate of how many pushes are needed in total for the given state.
+    """
+    total = 0
+    for box in state.boxes:
+        distance = [abs(box[0] - target[0]) + abs(box[1] - target[1]) for target in targets]
+        total += min(distance)
+
+    return total
+
+def Astar(width,height,walls,initial, goal, targets):
+    """ 
+    A* search algorithm
+    returns the list of pushes needed in order to get to the goal state
+    """
+    startNode = Node(initial)
+    startNode.heuristic = totalManhattanDist(initial,targets)
+    startNode.total = startNode.heuristic
+
+    frontier = []           # Priority queue of nodes waiting to be explored
+    fDic = {initial}        # Dictionary of States already in the frontier for faster lookup
+    explored = set()        # States already explored
+
+    heapq.heappush(frontier,startNode)
+
+    while frontier:
+        curNode = heapq.heappop(frontier)
+        curState = curNode.state
+        fDic.remove(curState)
+        explored.add(curState)
+
+        # Check if the current state is the goal
+        if curState.areBoxesEqual(goal):
+            pushes = []
+            node = curNode
+            while node.parent is not None:
+                pushes.append(node.push)
+                node = node.parent
+            pushes.reverse()
+            print("Goal Reached")
+            return pushes
+
+        for push in getActions(walls,curState):
+            newState = createState(width,height,walls,curState,push)
+
+            if newState in explored:
+                continue
+
+            curCost = curNode.cost + 1
+
+            if newState not in fDic:
+                newNode = Node(newState,curNode,push)
+                newNode.cost = curCost
+                newNode.heuristic = totalManhattanDist(newState,targets)
+                newNode.total = newNode.cost + newNode.heuristic
+
+                heapq.heappush(frontier,newNode)
+                fDic.add(newState)
+            else:
+                for node in frontier:
+                    if node.state == newState and curCost < node.cost:
+                        node.cost = curCost
+                        node.total = node.cost + node.heuristic
+                        node.parent = curNode
+                        node.push = push
+                        heapq.heapify(frontier)
+                        break
+
+    return None
+
+# End of A* stuff
 
 #Floodfill algorithm to check the player's access area, currently just using BFS
 #Prints out 1 and 0 whether a space is occupied or not
@@ -129,7 +226,7 @@ def getAccessibleArea(width, height, walls, boxes, playerPos):
 #Ex: The down coordinates of the box is free/not blocked. Since the accessible area has 1 on the up of the box, this means that pushing the box
 #downwards is indeed a valid movement
 #This movement is then added to the actionSet which is all the possible actions from this current state
-def getActions(width, height, walls, currentState):
+def getActions(walls, currentState):
     actionSet = set()
 
     blocked = walls.union(currentState.boxes)
