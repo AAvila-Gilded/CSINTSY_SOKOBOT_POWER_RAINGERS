@@ -15,6 +15,13 @@ from collections import deque
 #Find a way to update the playerAccess grid when moving from one state to another
 #Find better algorithms than bfs (maybe some heuristics that could prioritize better paths? maybe we could look up normal sokoban strats or smthn)
 
+LETTERS = {
+    Direction.UP: 'u',
+    Direction.DOWN: 'd',
+    Direction.LEFT: 'l',
+    Direction.RIGHT: 'r'
+}
+
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
@@ -68,11 +75,11 @@ class SokoBot:
                 7. Push box at 1,3 to the right (final target)
             """
 
-            print(*pushSeq)
+            #print(*pushSeq)
 
         except Exception as ex:
             print(ex)
-        return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
+        return boxPushesToMoves(pushSeq, player, boxes, walls)
 
 # Start of A* stuff
 class Node:
@@ -270,9 +277,72 @@ def createState(width, height, walls, exploring, action):
 
     return State(boxes,playerAccess)
 
+
+def findPath(start, goal, walls, boxes):
+    if start == goal:
+        return ""
+
+    blocked = walls.union(boxes)
+
+    # dict to store prev position as (x,y) and direction as char
+    cameFrom = {start: None}
+
+    q = deque()
+    q.append(start)
+
+    while q:
+        currPos = q.popleft()
+
+        for direction in Direction:
+            newPos = (currPos[0] + direction.row, currPos[1] + direction.column)
+            if newPos in blocked or newPos in cameFrom:
+                continue
+            cameFrom[newPos] = (currPos, LETTERS[direction])
+
+            if newPos == goal:
+                return reconstructPath(cameFrom, start, goal)
+            else:
+                q.append(newPos)
+
+    return None
+
+def reconstructPath(cameFrom, start, goal):
+    path = ""
+    cell = goal
+
+    # traces back from goal to start
+    while cameFrom[cell] is not None:
+        prev, direction = cameFrom[cell]
+        path += direction
+        cell = prev
+
+    return path[::-1]
+
+def boxPushesToMoves(pushSeq, player, boxes, walls):
+    moves = ""
+
+    currentBoxes = set(boxes)
+    
+    for push in pushSeq:
+        boxGoal, direction = push
+        # sets coords of player to position beside the box opposite of target
+        playerReadyPos = (boxGoal[0] - direction.row, boxGoal[1] - direction.column)
+        moves += findPath(player, playerReadyPos, walls, currentBoxes)
+        # adds extra letter to string for the actual push to target
+        moves += LETTERS[direction]
+        # player assumes old pos of box after push
+        player = boxGoal
+        currentBoxes.remove(boxGoal)
+        # box is now in the new position
+        currentBoxes.add((boxGoal[0] + direction.row, boxGoal[1] + direction.column))
+
+    return moves
+
 #For testing
 def printGrid(grid):
     for x in range(len(grid)):
         for y in range(len(grid[x])):
             print(grid[x][y], end="")
         print()
+
+
