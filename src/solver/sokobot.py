@@ -15,6 +15,7 @@ from collections import deque
 #Find a way to update the playerAccess grid when moving from one state to another
 #Find better algorithms than bfs (maybe some heuristics that could prioritize better paths? maybe we could look up normal sokoban strats or smthn)
 
+# maps the Direction enum to its corresponding letter representation; this is used to build the final return string
 LETTERS = {
     Direction.UP: 'u',
     Direction.DOWN: 'd',
@@ -277,47 +278,70 @@ def createState(width, height, walls, exploring, action):
 
     return State(boxes,playerAccess)
 
-
+# This finds the path from player start position to goal position using BFS (path for EACH box)
+# for context: the goal position is the position beside the box opposite of the direction of the push
 def findPath(start, goal, walls, boxes):
     if start == goal:
         return ""
 
     blocked = walls.union(boxes)
 
-    # dict to store prev position as (x,y) and direction as char
+    # dict to store prev position as (x,y) in this case, I just called it start; and direction as char, which is "None" at the start
     cameFrom = {start: None}
 
     q = deque()
     q.append(start)
-
+    
+    # while loop to explore the grid until we reach the goal (BFS)
     while q:
         currPos = q.popleft()
 
         for direction in Direction:
+            # calculates the new position based on the current position and the direction of movement
             newPos = (currPos[0] + direction.row, currPos[1] + direction.column)
             if newPos in blocked or newPos in cameFrom:
                 continue
+
+            # sets the previous position and direction for the new position in the cameFrom dictionary
+            # this kind of simulates the way we solve Frontier and Explored in class
+            # ex. cameFrom[(x,y)] = ((prevX, prevY), direction) to show where (x,y) came from and what direction we took to get there
+            # take note that direction is parsed into its corresponding character here, as seen in the LETTERS dictionary above
             cameFrom[newPos] = (currPos, LETTERS[direction])
 
+            # once we reach the goal, reconstruct path
             if newPos == goal:
                 return reconstructPath(cameFrom, start, goal)
+
+            # if goal is not reached, continue exploring
             else:
                 q.append(newPos)
 
     return None
 
+# This reconstructs the path from the goal position back to the start position using the cameFrom dictionary
+# It works by tracing backwards from goal to start, appending the direction 
 def reconstructPath(cameFrom, start, goal):
     path = ""
     cell = goal
 
     # traces back from goal to start
     while cameFrom[cell] is not None:
+        # cameFrom's (prevX, prevY) is assigned to 'prev' and the direction taken to get to (x,y) is assigned to 'direction'
         prev, direction = cameFrom[cell]
+        # path string is built by appending the direction
         path += direction
+        # cell is updated to the previous cell to continue tracing back
         cell = prev
 
+    # reverses the path string to get the correct order from start to goal 
     return path[::-1]
 
+
+# This function takes the push sequence (basically, the single final push to get the box to the target) 
+# from A* and converts it into a string of moves for the player to execute
+# It does this by finding running findPath (which finds the path from player's current position to position beside the box opposite the direction of the push) 
+
+# The result of this function is what is returned to the main.py file and printed out / used as the final solution
 def boxPushesToMoves(pushSeq, player, boxes, walls):
     moves = ""
 
