@@ -126,7 +126,8 @@ def Astar(width,height,walls,initial, goal, targets):
     explored = set()        # States already explored
 
     heapq.heappush(frontier,startNode)
-
+    deadCells = detectSimpleDeadlock(width, height, walls, targets)
+    
     while frontier:
         curNode = heapq.heappop(frontier)
         curState = curNode.state
@@ -143,8 +144,8 @@ def Astar(width,height,walls,initial, goal, targets):
             pushes.reverse()
             print("Goal Reached")
             return pushes
-
-        for push in getActions(walls,curState):
+        
+        for push in getActions(walls, curState, deadCells):
             newState = createState(width,height,walls,curState,push)
 
             if newState in explored:
@@ -169,7 +170,7 @@ def Astar(width,height,walls,initial, goal, targets):
                         node.push = push
                         heapq.heapify(frontier)
                         break
-
+      
     return None
 
 # End of A* stuff
@@ -190,11 +191,13 @@ def getAccessibleArea(width, height, walls, boxes, playerPos):
     #Initializes an empty map
     grid = [[0 for x in range(width)] for y in range(height)]
     explored = set()
+    
     blocked = walls.union(boxes)
 
     q = deque()
     q.append(playerPos)
-
+    explored.add(playerPos)
+    
     while q:
         pos = q.popleft()
         grid[pos[0]][pos[1]] = 1
@@ -234,11 +237,12 @@ def getAccessibleArea(width, height, walls, boxes, playerPos):
 #Ex: The down coordinates of the box is free/not blocked. Since the accessible area has 1 on the up of the box, this means that pushing the box
 #downwards is indeed a valid movement
 #This movement is then added to the actionSet which is all the possible actions from this current state
-def getActions(walls, currentState):
+def getActions(walls, currentState, deadCells):
     actionSet = set()
-
+    
     blocked = walls.union(currentState.boxes)
     accessible = currentState.playerAccess
+    
     
     for box in currentState.boxes:
         up = (box[0]-1, box[1])
@@ -249,20 +253,77 @@ def getActions(walls, currentState):
         #Up push means check if accesible from the free position at down of the box
 
         #Up Push. box[0] + 1][box[1] is the coordinates of down. same with the other directions
-        if accessible[box[0] + 1][box[1]] and up not in blocked:
+        if accessible[box[0] + 1][box[1]] and up not in blocked and up not in deadCells:
             actionSet.add((box,Direction.UP))
         #Down Push
-        if accessible[box[0] - 1][box[1]] and down not in blocked:
+        if accessible[box[0] - 1][box[1]] and down not in blocked and down not in deadCells:
             actionSet.add((box,Direction.DOWN))
         #Left Push
-        if accessible[box[0]][box[1]+1] and left not in blocked:
+        if accessible[box[0]][box[1]+1] and left not in blocked and left not in deadCells:
             actionSet.add((box,Direction.LEFT))
         #Right Push
-        if accessible[box[0]][box[1]-1] and right not in blocked:
+        if accessible[box[0]][box[1]-1] and right not in blocked and right not in deadCells:
             actionSet.add((box,Direction.RIGHT))
     
     return actionSet
 
+# Empty floor for reverse search for deadlocks
+# Removes all boxes except for walls and targets
+def getEmptyFloor(width, height, walls, targets):
+    #Initializes an empty map
+    grid = [[0 for x in range(width)] for y in range(height)]
+    
+    for y in range(1, height - 1):
+        for x in range(1, width - 1):
+            if ((y, x)) not in walls and ((y,x)) not in targets:
+                grid[y][x] = 1
+
+    return grid
+
+# Algorithm used here is a reverse search wherein a box is placed in the targets and a "player" attempts to pull
+# If a player was able to pull, its a good square, if not then its a dead square
+# For pruning in getActions
+def detectSimpleDeadlock(width, height, walls, targets):
+    validFloorCells = getEmptyFloor(width, height, walls, targets)
+    
+    # All squares from which a box can potentially reach a target
+    goodCell = set(targets)
+    q = deque(targets)
+
+    while q:
+        box = q.popleft() 
+
+        for direction in Direction:
+            dy = direction.row
+            dx = direction.column
+            
+            boxPullPos = (box[0] - dy, box[1] - dx)
+            playerPullPos = (box[0] - (dy * 2), box[1] - (dx * 2))
+            
+            #Check if boxPullPos and playerPullPos are within bounds
+            if not (0 <=  boxPullPos[0] < height and
+               0 <= boxPullPos[1] < width and
+               0 <= playerPullPos[0] < height and
+               0 <= playerPullPos[1] < width):
+                continue
+            
+            if validFloorCells[boxPullPos[0]][boxPullPos[1]] and validFloorCells[playerPullPos[0]] [playerPullPos[1]]:
+                if boxPullPos not in goodCell:
+                    goodCell.add(boxPullPos)
+                    q.append(boxPullPos)
+
+    # Every non-wall tile not found by reverse search is a dead square.
+    deadCell = set()
+
+    for y in range(height):
+        for x in range(width):
+            cell = (y, x)
+
+            if cell not in goodCell:
+                deadCell.add(cell)
+
+    return deadCell
+                
 def createState(width, height, walls, exploring, action):
     boxes = set(exploring.boxes)
     target = action[0]
