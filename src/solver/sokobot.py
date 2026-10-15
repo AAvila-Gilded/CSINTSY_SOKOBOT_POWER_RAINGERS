@@ -269,13 +269,13 @@ def getActions(walls, currentState, deadCells):
 
 # Empty floor for reverse search for deadlocks
 # Removes all boxes except for walls and targets
-def getEmptyFloor(width, height, walls, targets):
+def getEmptyFloor(width, height, walls):
     #Initializes an empty map
     grid = [[0 for x in range(width)] for y in range(height)]
     
     for y in range(1, height - 1):
         for x in range(1, width - 1):
-            if ((y, x)) not in walls and ((y,x)) not in targets:
+            if ((y, x)) not in walls:
                 grid[y][x] = 1
 
     return grid
