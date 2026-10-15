@@ -284,7 +284,7 @@ def getEmptyFloor(width, height, walls):
 # If a player was able to pull, its a good square, if not then its a dead square
 # For pruning in getActions
 def detectSimpleDeadlock(width, height, walls, targets):
-    validFloorCells = getEmptyFloor(width, height, walls, targets)
+    validFloorCells = getEmptyFloor(width, height, walls)
     
     # All squares from which a box can potentially reach a target
     goodCell = set(targets)
