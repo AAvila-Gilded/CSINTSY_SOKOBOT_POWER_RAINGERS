@@ -1,5 +1,6 @@
 import time, heapq
 from .helperStructures import State, Direction
+from .sokobit import SokoBit
 from collections import deque
 
 #TO DO:
@@ -26,6 +27,11 @@ LETTERS = {
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
+            useBitMapVersion = True
+            if(useBitMapVersion):
+                tempObj = SokoBit()
+                return tempObj.solveSokobanPuzzle(width, height, mapData, itemsData)
+            
             #Reads the initial data and saves them as a set of coordinates
             walls = set()
             boxes = set()
@@ -65,7 +71,7 @@ class SokoBot:
                             ((2,3), Direction.UP),
                             ((2,4), Direction.DOWN),
                             ((1,3), Direction.RIGHT)
-                          ]
+                        ]
                 Description:
                 1. Push box at 3,4 to the left
                 2. Push box at 3,3 to the left (target)
@@ -127,8 +133,18 @@ def Astar(width,height,walls,initial, goal, targets):
 
     heapq.heappush(frontier,startNode)
     deadCells = detectSimpleDeadlock(width, height, walls, targets)
-    
+
+    TIME_LIMIT = 15
+    startTime = time.monotonic()
+    count = 0
     while frontier:
+        count += 1
+        print(count)
+        if time.monotonic() - startTime > TIME_LIMIT:
+            print("Time Limit Reached")
+            break
+
+
         curNode = heapq.heappop(frontier)
         curState = curNode.state
         fDic.remove(curState)
