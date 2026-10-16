@@ -243,15 +243,15 @@ def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,manhattanD
     heapq.heappush(frontier,startNode)
     deadCells = detectSimpleDeadlock(width, height, walls, gameBox, leftColumn, rightColumn, targets)
 
-    TIME_LIMIT = 15
-    startTime = time.monotonic()
+    # TIME_LIMIT = 15
+    # startTime = time.monotonic()
     count = 0
     while frontier:
         count += 1
         print(count)
-        if time.monotonic() - startTime > TIME_LIMIT:
-            print("Time Limit Reached")
-            break
+        # if time.monotonic() - startTime > TIME_LIMIT:
+        #     print("Time Limit Reached")
+        #     break
 
         curNode = heapq.heappop(frontier)
         curState = curNode.state
