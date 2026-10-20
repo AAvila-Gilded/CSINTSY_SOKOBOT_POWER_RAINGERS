@@ -3,6 +3,8 @@ from .helperStructures import State, Direction
 from .sokobit import SokoBit
 from collections import deque
 
+# python -m src.main.driver 14 bot
+
 #TO DO:
 #Get a way to generate actions from a state
 #Make an algorithm to explore actions
@@ -36,6 +38,7 @@ class SokoBot:
             walls = set()
             boxes = set()
             targets = set()
+            floor = set()
             player = ()
             #Gets the current positions of each object in the maze
             for row in range(height):
@@ -48,6 +51,9 @@ class SokoBot:
                         walls.add((row,col))
                     if mapData[row][col] == '.':
                         targets.add((row,col))
+                    if mapData[row][col] == ' ':
+                        floor.add((row,col))
+
 
             #Gets the initial area the player can access without pushing
             playerAccess = getAccessibleArea(width, height, walls, boxes, player)   #Flood fill algorithm, could find a faster one
@@ -132,7 +138,11 @@ def Astar(width,height,walls,initial, goal, targets):
     explored = set()        # States already explored
 
     heapq.heappush(frontier,startNode)
+
+    # check for corral first before deadlocks
+    # if corral region exists then check corral edge if theres a box (pi corral)
     deadCells = detectSimpleDeadlock(width, height, walls, targets)
+    # will add other pruning here 
 
     # TIME_LIMIT = 15
     # startTime = time.monotonic()
@@ -172,6 +182,7 @@ def Astar(width,height,walls,initial, goal, targets):
             if newState not in fDic:
                 newNode = Node(newState,curNode,push)
                 newNode.cost = curCost
+                # can compute push cost between box and target for all targets use that as new heuristic?
                 newNode.heuristic = totalManhattanDist(newState,targets)
                 newNode.total = newNode.cost + newNode.heuristic
 
@@ -237,6 +248,73 @@ def getAccessibleArea(width, height, walls, boxes, playerPos):
 
     return grid
 
+
+
+# inaccessible but floor ?
+
+def getCorral(accessible, width, height, floor, boxes):
+    # uses accessible area grid 
+    # to check if theres no corral region / compare to 0 matrix then proceed to other pruning methods
+
+    corralCells = set()
+
+    # looks for corral region
+    for x in range(width):
+        for y in range(height):
+            if not accessible[x][y] and (x,y) in floor and (x,y) not in boxes:
+                corralCells.add(x,y)
+
+    # separate corralCells into area and boundary
+    corralRegion = []
+    explored = set()
+
+    cellQ = deque()
+    corrals = []
+    
+    # for each corral cell, check neighbors
+    for cell in corralCells:
+        cellQ.append(cell)
+
+        # check neighbors of each cell and add to queue
+        while cellQ:
+            area, boundary = set(), set()
+
+            cell = cellQ.popleft
+
+            # all cells are already corral cell so automatically add them
+            area.add(cell)
+
+
+            # looks at neighboring cells
+            up = (cell[0]-1, cell[1])
+            down = (cell[0]+1, cell[1])
+            left = (cell[0], cell[1]-1)
+            right = (cell[0], cell[1]+1)
+
+            # neighbor check
+            if up in boxes and up not in explored:
+                boundary.add(up)
+                explored.add(up)
+
+            if down in boxes and down not in explored:
+                boundary.add(up)
+                explored.add(up)
+
+            if left in boxes and left not in explored:
+                boundary.add(up)
+                explored.add(up)
+
+            if right in boxes and right not in explored:
+                boundary.add(up)
+                explored.add(up)
+
+        corrals.append(area,boundary)
+        # once cellQ is exhausted / no corral cells remaining, split is complete
+        # add each "pocket" or corral area to list of tuples (area, boundary)
+
+    return corrals
+
+
 #This returns the possible actions based on the accessible area
 #It checks the coordinates of each box and checks if those coordinates are within the range of the accesible area
 #Using the example grid from getAccessibleArea:
@@ -296,6 +374,10 @@ def getEmptyFloor(width, height, walls):
 
     return grid
 
+
+
+
+
 # Algorithm used here is a reverse search wherein a box is placed in the targets and a "player" attempts to pull
 # If a player was able to pull, its a good square, if not then its a dead square
 # For pruning in getActions
@@ -339,6 +421,10 @@ def detectSimpleDeadlock(width, height, walls, targets):
                 deadCell.add(cell)
 
     return deadCell
+
+#def detectFrozenDeadlock(width, height, walls, targets):
+# box beside another box (cant push opposite sides (ex check if vertical freeze), may be pushed horizontally)
+# box beside 
                 
 def createState(width, height, walls, exploring, action):
     boxes = set(exploring.boxes)
