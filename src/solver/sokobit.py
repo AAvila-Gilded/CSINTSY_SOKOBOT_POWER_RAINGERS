@@ -107,11 +107,9 @@ class SokoBit:
 
             #Builds a lookup table so getting the manhattan distance for each box is O(1)
             #Basically since target positions don't change, we just precompute the distance from each square
-            manhattanDistance = [999] * (width * height)
-            for row in range(height):
-                for col in range(width):
-                    index = (height - (row + 1)) * width + (width - (col + 1))
-                    manhattanDistance[index] = min(abs(row-targetRow) + abs(col-targetColumn) for targetRow, targetColumn in targetCoords)
+
+            # updated: lookup table for push amount to a target; like a heatmap for the entire grid
+            pushMap = getPushMap(width,height,mapData,targetCoords)
 
             #Gets the number of targets needed
             targetNum = len(targetCoords)
@@ -124,7 +122,7 @@ class SokoBit:
             goal = State(targets, playerAccess)
 
             # push sequence - the sequence of pushes from the start to the goal
-            pushSeq = Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,manhattanDistance,initial,goal,targets)
+            pushSeq = Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,initial,goal,targets)
             """
                 pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
                 Output format is such: [((row, col), Direction)]
@@ -156,6 +154,53 @@ class SokoBit:
             print(ex)
             traceback.print_exc()
             return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
+
+
+
+def getPushMap(width, height, mapData, targetCoords):
+    """
+    BFS from each target to each cell on the map to get the amount of pushes a coordinate needs to reach the nearest target
+    returns a bitmap (?) of the distance (in pushes) of each cell to a target
+
+    Example using testlevel:
+          # # # # # #
+          # x 1 0 x #
+        # # 1 2 1 x #
+        # 0 0 1 0 x #
+        # # # # # # #
+
+        0 = target
+        x = deadlock
+        1,2 = pushes to the nearest target
+    """
+
+    pushCount = {}
+    queue = deque(targetCoords)
+
+    for target in targetCoords:
+        pushCount[target] = 0
+
+    while queue:
+        r,c = queue.popleft()
+        for dir in Direction:
+            i,j = dir.row, dir.column
+
+            box = r-i, c-j       # box position
+            pos = r-2*i, c-2*j   # player position
+
+        isValid = isFloor(width,height,mapData,*box) and isFloor(width,height,mapData,*pos)
+
+        if isValid and box not in pushCount:
+            pushCount[box] = pushCount[(r,c)] + 1
+            queue.append(box)
+
+    pushMap = [999] * (width * height)
+    for (r,c), pushCtr in pushCount.items():
+        pushMap[(height - (r+1)) * width + (width-(c+1))] = pushCtr
+    return pushMap
+
+def isFloor(width, height, mapData, r, c):
+    return 0 <= r < height and 0 <= c < width and mapData[r][c] != '#'
 
 #Helper Bit Functions
 def getBitIndices(bitmap):
@@ -208,8 +253,7 @@ class Node:
         # Tie-breaking rule for the priority queue based on total
         return self.total < other.total
 
-
-def totalManhattanDist(state,targets,manhattanDistance):
+def totalManhattanDist(state,pushMap):
     """
     The sum of the manhattan distance of each box to its nearest target.
     In order to get an estimate of how many pushes are needed in total for the given state.
@@ -220,20 +264,20 @@ def totalManhattanDist(state,targets,manhattanDistance):
         total = 0
         for box in getBitIndices(state.boxes):
             #This is just getting the precomputed manhattan distance
-            total += manhattanDistance[box]
+            total += pushMap[box]
 
         return total
     """
     #Alternate single line return
-    return sum(manhattanDistance[box] for box in getBitIndices(state.boxes))
+    return sum(pushMap[box] for box in getBitIndices(state.boxes))
 
-def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,manhattanDistance,initial,goal,targets):
+def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,initial,goal,targets):
     """ 
     A* search algorithm
     returns the list of pushes needed in order to get to the goal state
     """
     startNode = Node(initial)
-    startNode.heuristic = totalManhattanDist(initial,targets,manhattanDistance)
+    startNode.heuristic = totalManhattanDist(initial,pushMap)
     startNode.total = startNode.heuristic
 
     frontier = []           # Priority queue of nodes waiting to be explored
@@ -245,10 +289,7 @@ def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,manhattanD
 
     # TIME_LIMIT = 15
     # startTime = time.monotonic()
-    count = 0
     while frontier:
-        count += 1
-        print(count)
         # if time.monotonic() - startTime > TIME_LIMIT:
         #     print("Time Limit Reached")
         #     break
@@ -281,7 +322,7 @@ def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,manhattanD
             if newState not in fDic:
                 newNode = Node(newState,curNode,push)
                 newNode.cost = curCost
-                newNode.heuristic = totalManhattanDist(newState,targets,manhattanDistance)
+                newNode.heuristic = totalManhattanDist(newState,pushMap)
                 newNode.total = newNode.cost + newNode.heuristic
 
                 heapq.heappush(frontier,newNode)
