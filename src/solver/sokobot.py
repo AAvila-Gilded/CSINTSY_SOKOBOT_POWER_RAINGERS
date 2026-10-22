@@ -29,7 +29,7 @@ LETTERS = {
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
-            useBitMapVersion = True
+            useBitMapVersion = False
             if(useBitMapVersion):
                 tempObj = SokoBit()
                 return tempObj.solveSokobanPuzzle(width, height, mapData, itemsData)
@@ -139,8 +139,8 @@ def Astar(width,height,walls,initial, goal, targets):
 
     heapq.heappush(frontier,startNode)
 
-    # check for corral first before deadlocks
-    # if corral region exists then check corral edge if theres a box (pi corral)
+
+
     deadCells = detectSimpleDeadlock(width, height, walls, targets)
     # will add other pruning here 
 
@@ -148,8 +148,10 @@ def Astar(width,height,walls,initial, goal, targets):
     # startTime = time.monotonic()
     count = 0
     while frontier:
+
+          
         count += 1
-        print(count)
+        #print(count)
         # if time.monotonic() - startTime > TIME_LIMIT:
         #     print("Time Limit Reached")
         #     break
@@ -171,7 +173,7 @@ def Astar(width,height,walls,initial, goal, targets):
             print("Goal Reached")
             return pushes
         
-        for push in getActions(walls, curState, deadCells):
+        for push in getActions(walls, curState, deadCells, width, height, targets):
             newState = createState(width,height,walls,curState,push)
 
             if newState in explored:
@@ -252,17 +254,17 @@ def getAccessibleArea(width, height, walls, boxes, playerPos):
 
 # inaccessible but floor ?
 
-def getCorral(accessible, width, height, floor, boxes):
+def getCorral(accessible, width, height, walls, boxes):
     # uses accessible area grid 
     # to check if theres no corral region / compare to 0 matrix then proceed to other pruning methods
 
     corralCells = set()
 
     # looks for corral region
-    for x in range(width):
-        for y in range(height):
-            if not accessible[x][y] and (x,y) in floor and (x,y) not in boxes:
-                corralCells.add(x,y)
+    for x in range(height):
+        for y in range(width):
+            if not accessible[x][y] and (x,y) not in walls and (x,y) not in boxes:
+                corralCells.add((x,y))
 
     # separate corralCells into area and boundary
     corralRegion = []
@@ -273,13 +275,17 @@ def getCorral(accessible, width, height, floor, boxes):
     
     # for each corral cell, check neighbors
     for cell in corralCells:
+        if cell in explored:
+            continue
+
+        area, boundary = set(), set()
         cellQ.append(cell)
+        explored.add(cell)
 
         # check neighbors of each cell and add to queue
         while cellQ:
-            area, boundary = set(), set()
-
-            cell = cellQ.popleft
+            
+            cell = cellQ.popleft()
 
             # all cells are already corral cell so automatically add them
             area.add(cell)
@@ -292,23 +298,14 @@ def getCorral(accessible, width, height, floor, boxes):
             right = (cell[0], cell[1]+1)
 
             # neighbor check
-            if up in boxes and up not in explored:
-                boundary.add(up)
-                explored.add(up)
+            for n in (up,down,left,right):
+                if n in boxes:
+                    boundary.add(n)
+                elif n not in explored and n in corralCells:
+                    explored.add(n)
+                    cellQ.append(n)
 
-            if down in boxes and down not in explored:
-                boundary.add(up)
-                explored.add(up)
-
-            if left in boxes and left not in explored:
-                boundary.add(up)
-                explored.add(up)
-
-            if right in boxes and right not in explored:
-                boundary.add(up)
-                explored.add(up)
-
-        corrals.append(area,boundary)
+        corrals.append((area,boundary))
         # once cellQ is exhausted / no corral cells remaining, split is complete
         # add each "pocket" or corral area to list of tuples (area, boundary)
 
@@ -331,14 +328,29 @@ def getCorral(accessible, width, height, floor, boxes):
 #Ex: The down coordinates of the box is free/not blocked. Since the accessible area has 1 on the up of the box, this means that pushing the box
 #downwards is indeed a valid movement
 #This movement is then added to the actionSet which is all the possible actions from this current state
-def getActions(walls, currentState, deadCells):
+def getActions(walls, currentState, deadCells, width, height, targets):
     actionSet = set()
     
     blocked = walls.union(currentState.boxes)
     accessible = currentState.playerAccess
+    corrals = getCorral(accessible, width, height, walls, currentState.boxes)
+    #print(corrals)
     
-    
-    for box in currentState.boxes:
+    # initialize candidate boxes to currentstate boxes 
+    # this is so that we can try every box by default, and apply pruning
+    # when PI corral is found
+    candidateBoxes = currentState.boxes
+
+    # go through each corral pocket
+    for area, boundary in corrals:
+        # check if PI (player accessible and can be pushed inwards towards the corral)
+        if isPI(area, boundary, accessible, blocked, deadCells, targets):
+            # if PI, only set boundaries as candidate boxes
+            candidateBoxes = boundary
+            break
+
+
+    for box in candidateBoxes:
         up = (box[0]-1, box[1])
         down = (box[0]+1, box[1])
         left = (box[0], box[1]-1)
@@ -376,6 +388,32 @@ def getEmptyFloor(width, height, walls):
 
 
 
+def isPI(area, boundary, accessible, blocked, deadCells, targets):
+    # check if all boundary boxes are already solved / in targets
+    # check if theres no target inside the corral pocket
+    if all(box in targets for box in boundary) and not any(cell in targets for cell in area):
+        return False
+
+
+    # looks at all directions to see if pushes go inward (valid) / outward / sideward
+    for box in boundary:
+        for direction in Direction:
+            dy = direction.row
+            dx = direction.column
+
+            boxLandingPos = (box[0]+dy, box[1]+dx)
+            playerSide = (box[0]-dy, box[1]-dx)
+
+            if boxLandingPos in area:
+                if boxLandingPos not in deadCells and not accessible[playerSide[0]][playerSide[1]]:
+                    return False
+
+            # if not in area
+            else:
+                if accessible[playerSide[0]][playerSide[1]] and boxLandingPos not in blocked and boxLandingPos not in deadCells:
+                    return False
+    return True
+    
 
 
 # Algorithm used here is a reverse search wherein a box is placed in the targets and a "player" attempts to pull
