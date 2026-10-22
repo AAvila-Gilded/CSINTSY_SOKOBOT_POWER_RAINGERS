@@ -174,6 +174,17 @@ def Astar(width,height,walls,initial, goal, targets):
             return pushes
         
         for push in getActions(walls, curState, deadCells, width, height, targets):
+            box, dirP = push
+
+            movedBox = (box[0] + dirP.row, box[1] + dirP.column)
+            # records new boxes after the push
+            newBoxes = (curState.boxes - {box}).union({movedBox})
+
+            # check if movedBox in newBoxes state hits frozen deadlock
+            # if frozen, skip creating new state
+            if detectFrozenDeadlock(movedBox,newBoxes,walls,deadCells,targets):
+                continue
+            
             newState = createState(width,height,walls,curState,push)
 
             if newState in explored:
@@ -459,6 +470,54 @@ def detectSimpleDeadlock(width, height, walls, targets):
                 deadCell.add(cell)
 
     return deadCell
+
+def isFrozen(box, boxes, walls, deadCells, checking):
+    checking = checking.union({box})
+    # treats box currently being checked as a wall 
+    # so that when u recurse into neigboring boxes it looks at box as something you can't move
+    # like A checks B, B checks A (where A and B are directly neighboring boxes)
+    blocked = walls.union(checking)
+
+    up = (box[0]-1, box[1])
+    down = (box[0]+1, box[1])
+    left = (box[0], box[1]-1)
+    right = (box[0], box[1]+1)
+
+    horizontalBlock = ( left in blocked or right in blocked
+                       or (left in deadCells and right in deadCells)
+                       or (left in boxes and isFrozen(left,boxes,walls,deadCells,checking))
+                       or (right in boxes and isFrozen(right,boxes,walls,deadCells,checking))
+                    )
+
+    verticalBlock = ( up in blocked or down in blocked
+                           or (up in deadCells and down in deadCells)
+                           or (up in boxes and isFrozen(up,boxes,walls,deadCells,checking))
+                           or (down in boxes and isFrozen(down,boxes,walls,deadCells,checking))
+                     )
+
+    return horizontalBlock and verticalBlock
+
+    
+def detectFrozenDeadlock(movedBox, boxes, walls, deadCells, targets):
+    toCheck = [movedBox]
+
+    up = (movedBox[0]-1, movedBox[1])
+    down = (movedBox[0]+1, movedBox[1])
+    left = (movedBox[0], movedBox[1]-1)
+    right = (movedBox[0], movedBox[1]+1)
+
+    # check if there's directly neighboring box
+    for n in (up,down,left,right):
+        if n in boxes:
+            toCheck.append(n)
+
+    # checks is box is unsolved and frozen 
+    for box in toCheck:
+        if box not in targets and isFrozen(box, boxes, walls, deadCells, set()):
+            return True
+
+    return False
+
 
 #def detectFrozenDeadlock(width, height, walls, targets):
 # box beside another box (cant push opposite sides (ex check if vertical freeze), may be pushed horizontally)
