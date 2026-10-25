@@ -31,7 +31,7 @@ class SokoBit:
             """
                 Creates a mask that encompasses the whole game area by left shifting 1 width*height times then subtracting one.
                 For example, a 3x3 grid. Left shift 1 9 times.
-                           1
+                            1
                 000      000
                 000  ->  000
                 001      000
@@ -107,9 +107,9 @@ class SokoBit:
 
             #Builds a lookup table so getting the manhattan distance for each box is O(1)
             #Basically since target positions don't change, we just precompute the distance from each square
-
             # updated: lookup table for push amount to a target; like a heatmap for the entire grid
-            pushMap = getPushMap(width,height,mapData,targetCoords)
+            pushMap = getPushMap(width,height,gameBox,walls,targets,leftColumn,rightColumn)
+            print(pushMap)
 
             #Gets the number of targets needed
             targetNum = len(targetCoords)
@@ -123,29 +123,30 @@ class SokoBit:
 
             # push sequence - the sequence of pushes from the start to the goal
             pushSeq = Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,initial,goal,targets)
+            print(pushSeq)
             """
                 pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
-                Output format is such: [((row, col), Direction)]
-                    (row,col) = represents the coordinates of the box being pushed
+                Output format is such: [(boxIndex, Direction)]
+                    boxIndex = represents the coordinates of the box being pushed
                     Direction = the direction of the push
                 
                 Example using resulting list from testlevel:
-                    pushSeq = [ ((3,4), Direction.LEFT), 
-                                ((3,3), Direction.LEFT),
-                                ((3,2), Direction.LEFT),
-                                ((2,2), Direction.DOWN),
-                                ((2,3), Direction.UP),
-                                ((2,4), Direction.DOWN),
-                                ((1,3), Direction.RIGHT)
+                    pushSeq = [ (512, Direction.LEFT), 
+                                (1024, Direction.LEFT),
+                                (2048, Direction.LEFT),
+                                (262144, Direction.DOWN),
+                                (131072, Direction.UP),
+                                (65536, Direction.DOWN),
+                                (16777216, Direction.RIGHT)
                             ]
-                    Description:
-                    1. Push box at 3,4 to the left
-                    2. Push box at 3,3 to the left (target)
-                    3. Push box at 3,2 to the left (final target)
-                    4. Push box at 2,2 down (final target)
-                    5. Push box at 2,3 up
-                    6. Push box at 2,4 down (final target)
-                    7. Push box at 1,3 to the right (final target)
+                    Description (The bottom right corner is index 1, with coordinates of (height, width)):
+                    1. Push box at 3,4 (512) to the left
+                    2. Push box at 3,3 (1024) to the left (target)
+                    3. Push box at 3,2 (2048) to the left (final target)
+                    4. Push box at 2,2 (262144) down (final target)
+                    5. Push box at 2,3 (131072) up
+                    6. Push box at 2,4 (65536) down (final target)
+                    7. Push box at 1,3 (16777216) to the right (final target)
             """
 
             #print(*pushSeq)
@@ -157,10 +158,10 @@ class SokoBit:
 
 
 
-def getPushMap(width, height, mapData, targetCoords):
+def getPushMap(width, height, gameBox, walls, targets, leftColumn, rightColumn):
     """
     BFS from each target to each cell on the map to get the amount of pushes a coordinate needs to reach the nearest target
-    returns a bitmap (?) of the distance (in pushes) of each cell to a target
+    returns a look-up table of the distance (in pushes) of each cell to a target
 
     Example using testlevel:
           # # # # # #
@@ -174,33 +175,34 @@ def getPushMap(width, height, mapData, targetCoords):
         1,2 = pushes to the nearest target
     """
 
+    floor = walls ^ gameBox
+    printBitMap(floor,width,height)
     pushCount = {}
-    queue = deque(targetCoords)
+    targetArray = getIndivBits(targets)
+    queue = deque(targetArray)
 
-    for target in targetCoords:
+    for target in targetArray:
         pushCount[target] = 0
 
     while queue:
-        r,c = queue.popleft()
+        pos = queue.popleft()
+        print(bitToIndex(pos))
+        boxPos = 0
+        playerPos = 0
         for dir in Direction:
-            i,j = dir.row, dir.column
+            boxPos = shiftBit(pos,dir,width,height,gameBox,leftColumn,rightColumn)
+            playerPos = shiftBit(boxPos,dir,width,height,gameBox,leftColumn,rightColumn)
 
-            box = r-i, c-j       # box position
-            pos = r-2*i, c-2*j   # player position
+            isValid = boxPos & floor and playerPos & floor
 
-        isValid = isFloor(width,height,mapData,*box) and isFloor(width,height,mapData,*pos)
-
-        if isValid and box not in pushCount:
-            pushCount[box] = pushCount[(r,c)] + 1
-            queue.append(box)
+            if isValid and boxPos not in pushCount:
+                pushCount[boxPos] = pushCount[pos] + 1
+                queue.append(boxPos)
 
     pushMap = [999] * (width * height)
-    for (r,c), pushCtr in pushCount.items():
-        pushMap[(height - (r+1)) * width + (width-(c+1))] = pushCtr
+    for pos, pushCtr in pushCount.items():
+        pushMap[bitToIndex(pos)] = pushCtr
     return pushMap
-
-def isFloor(width, height, mapData, r, c):
-    return 0 <= r < height and 0 <= c < width and mapData[r][c] != '#'
 
 #Helper Bit Functions
 def getBitIndices(bitmap):
@@ -235,6 +237,27 @@ def getIndivBits(bitmap):
         bitmap ^= lowestSetBit
     return indivBits
 
+def bitToIndex(bitmap):
+    """
+        Works like getBitIndices but for just 1 bitmap.
+    """
+    lowestSetBit = bitmap & -bitmap
+    return lowestSetBit.bit_length()-1
+
+def shiftBit(bitmap, direction, width, height, gameBox, leftColumn, rightColumn) -> int:
+    """
+        Shifts the bit depending on the size of the map and the given direction.
+    """
+    match (direction):
+        case Direction.UP:
+            return bitmap << width & gameBox
+        case Direction.DOWN:
+            return bitmap >> width & gameBox
+        case Direction.LEFT:
+            return bitmap << 1 & (gameBox ^ rightColumn)
+        case Direction.RIGHT:
+            return bitmap >> 1 & (gameBox ^ leftColumn)
+    return 0
 
 # Start of A* stuff
 class Node:
@@ -262,7 +285,7 @@ def totalManhattanDist(state,pushMap):
     """
         Equivalent normal loop
         total = 0
-        for box in getBitIndices(state.boxes):
+        for box in getIndivBits(state.boxes):
             #This is just getting the precomputed manhattan distance
             total += pushMap[box]
 
@@ -617,16 +640,7 @@ def findPath(start, goal, walls, boxes, width, height, gameBox, leftColumn, righ
 
         for direction in Direction:
             # calculates the new position based on the current position and the direction of movement
-            newPos = 0
-            match (direction):
-                case Direction.UP:
-                    newPos = currPos << width & gameBox
-                case Direction.DOWN:
-                    newPos = currPos >> width & gameBox
-                case Direction.LEFT:
-                    newPos = currPos << 1 & (gameBox ^ rightColumn)
-                case Direction.RIGHT:
-                    newPos = currPos >> 1 & (gameBox ^ leftColumn)
+            newPos: int = shiftBit(currPos,direction,width,height,gameBox,leftColumn,rightColumn)
 
             if newPos & blocked or newPos & cameFromMap:
                 continue
@@ -711,6 +725,8 @@ def boxPushesToMoves(pushSeq, player, boxes, walls, width, height, gameBox, left
                 currentBoxes |= boxGoal >> 1 & (gameBox ^ leftColumn)
 
     return moves
+
+
 
 #For testing
 def printGrid(grid):
