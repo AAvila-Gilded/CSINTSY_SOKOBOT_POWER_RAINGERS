@@ -158,8 +158,8 @@ def getPushMap(width, height, mapData, targetCoords):
 def isFloor(width, height, mapData, r, c):
     return 0 <= r < height and 0 <= c < width and mapData[r][c] != '#'
 
-def pushManHattan(state, pushMap):
-    return sum(pushMap[box] for box in state.boxes)
+def pushManHattan(state, pushMap, width, height):
+    return sum(pushMap[(height - (r+1)) * width + (width-(c+1))] for r, c in state.boxes)
 
 def totalManhattanDist(state,targets):
     """
@@ -245,7 +245,7 @@ def Astar(width,height,walls,initial, goal, targets, pushMap):
                 # can compute push cost between box and target for all targets use that as new heuristic?
                 # newNode.heuristic = totalManhattanDist(newState,targets)
                 # use revisedlookup
-                newNode.heuristic = pushManHattan(newState,pushMap)
+                newNode.heuristic = pushManHattan(newState,pushMap,width,height)
                 newNode.total = newNode.cost + newNode.heuristic
 
                 heapq.heappush(frontier,newNode)
