@@ -30,7 +30,7 @@ LETTERS = {
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
-            useBitMapVersion = True
+            useBitMapVersion = False
             if(useBitMapVersion):
                 tempObj = SokoBit()
                 return tempObj.solveSokobanPuzzle(width, height, mapData, itemsData)
@@ -194,7 +194,6 @@ def Astar(width,height,walls,initial, goal, targets,targetPushMaps):
 
 
     deadCells = detectSimpleDeadlock(width, height, walls, targets)
-    # will add other pruning here 
 
     # TIME_LIMIT = 15
     # startTime = time.monotonic()
@@ -224,17 +223,6 @@ def Astar(width,height,walls,initial, goal, targets,targetPushMaps):
             return pushes
         
         for push in getActions(walls, curState, deadCells, width, height, targets):
-            box, dirP = push
-
-            movedBox = (box[0] + dirP.row, box[1] + dirP.column)
-            # records new boxes after the push
-            newBoxes = (curState.boxes - {box}).union({movedBox})
-
-            # check if movedBox in newBoxes state hits frozen deadlock
-            # if frozen, skip creating new state
-            if detectFrozenDeadlock(movedBox,newBoxes,walls,deadCells,targets):
-                continue
-            
             newState = createState(width,height,walls,curState,push)
 
             if newState in explored:
@@ -395,7 +383,6 @@ def getActions(walls, currentState, deadCells, width, height, targets):
     blocked = walls.union(currentState.boxes)
     accessible = currentState.playerAccess
     corrals = getCorral(accessible, width, height, walls, currentState.boxes)
-    #print(corrals)
     
     # initialize candidate boxes to currentstate boxes 
     # this is so that we can try every box by default, and apply pruning
@@ -410,7 +397,6 @@ def getActions(walls, currentState, deadCells, width, height, targets):
             candidateBoxes = boundary
             break
 
-
     for box in candidateBoxes:
         up = (box[0]-1, box[1])
         down = (box[0]+1, box[1])
@@ -420,16 +406,20 @@ def getActions(walls, currentState, deadCells, width, height, targets):
         #Up push means check if accesible from the free position at down of the box
 
         #Up Push. box[0] + 1][box[1] is the coordinates of down. same with the other directions
-        if accessible[box[0] + 1][box[1]] and up not in blocked and up not in deadCells:
+        up_frozen = detectFrozenDeadlock(up, (currentState.boxes - {box}).union({up}), walls, deadCells, targets)
+        if accessible[box[0] + 1][box[1]] and up not in blocked and up not in deadCells and not up_frozen:
             actionSet.add((box,Direction.UP))
         #Down Push
-        if accessible[box[0] - 1][box[1]] and down not in blocked and down not in deadCells:
+        down_frozen = detectFrozenDeadlock(down, (currentState.boxes - {box}).union({down}), walls, deadCells, targets)
+        if accessible[box[0] - 1][box[1]] and down not in blocked and down not in deadCells and not down_frozen:
             actionSet.add((box,Direction.DOWN))
         #Left Push
-        if accessible[box[0]][box[1]+1] and left not in blocked and left not in deadCells:
+        left_frozen = detectFrozenDeadlock(left, (currentState.boxes - {box}).union({left}), walls, deadCells, targets)
+        if accessible[box[0]][box[1]+1] and left not in blocked and left not in deadCells and not left_frozen:
             actionSet.add((box,Direction.LEFT))
         #Right Push
-        if accessible[box[0]][box[1]-1] and right not in blocked and right not in deadCells:
+        right_frozen = detectFrozenDeadlock(right, (currentState.boxes - {box}).union({right}), walls, deadCells, targets)
+        if accessible[box[0]][box[1]-1] and right not in blocked and right not in deadCells and not right_frozen:
             actionSet.add((box,Direction.RIGHT))
     
     return actionSet
@@ -568,8 +558,6 @@ def detectFrozenDeadlock(movedBox, boxes, walls, deadCells, targets):
 
     return False
 
-
-#def detectFrozenDeadlock(width, height, walls, targets):
 # box beside another box (cant push opposite sides (ex check if vertical freeze), may be pushed horizontally)
 # box beside 
                 
