@@ -23,7 +23,13 @@ LETTERS = {
     Direction.RIGHT: 'r'
 }
 
-import traceback
+shifts = {
+
+}
+
+gwidth = -1
+gheight = -1
+gameBox = -1
 
 class SokoBit:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
@@ -31,7 +37,7 @@ class SokoBit:
             """
                 Creates a mask that encompasses the whole game area by left shifting 1 width*height times then subtracting one.
                 For example, a 3x3 grid. Left shift 1 9 times.
-                           1
+                            1
                 000      000
                 000  ->  000
                 001      000
@@ -42,7 +48,16 @@ class SokoBit:
                 000      111
                 Making a mask that encompasses the grid.
             """
+            global gwidth, gheight, gameBox, shifts
+            gwidth = width
+            gheight = height
             gameBox = (1 << (width*height)) - 1
+            shifts = {
+                Direction.UP: width,
+                Direction.DOWN: -width,
+                Direction.LEFT: 1,
+                Direction.RIGHT: -1
+            }
             """
                 Creates a mask for the whole left column of the game area. << width - 1 shifts the bit to the left side, and x*width shifts it up by x rows.
                 Example: 3x3 grid, width 3, height 3
@@ -107,60 +122,60 @@ class SokoBit:
 
             #Builds a lookup table so getting the manhattan distance for each box is O(1)
             #Basically since target positions don't change, we just precompute the distance from each square
-
             # updated: lookup table for push amount to a target; like a heatmap for the entire grid
-            pushMap = getPushMap(width,height,mapData,targetCoords)
+            pushMap = getPushMap(walls,targets)
+            # print(pushMap)
 
             #Gets the number of targets needed
             targetNum = len(targetCoords)
 
             #Gets the initial area the player can access without pushing
-            playerAccess = getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightColumn, player)
+            playerAccess = getAccessibleArea(walls, boxes, player)
 
             #Initializes the Initial State and the Goal State
             initial = State(boxes, playerAccess)
             goal = State(targets, playerAccess)
 
             # push sequence - the sequence of pushes from the start to the goal
-            pushSeq = Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,initial,goal,targets)
+            pushSeq = Astar(walls,targetNum,pushMap,initial,goal,targets)
+            # print(pushSeq)
             """
                 pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
-                Output format is such: [((row, col), Direction)]
-                    (row,col) = represents the coordinates of the box being pushed
+                Output format is such: [(boxIndex, Direction)]
+                    boxIndex = represents the coordinates of the box being pushed
                     Direction = the direction of the push
                 
                 Example using resulting list from testlevel:
-                    pushSeq = [ ((3,4), Direction.LEFT), 
-                                ((3,3), Direction.LEFT),
-                                ((3,2), Direction.LEFT),
-                                ((2,2), Direction.DOWN),
-                                ((2,3), Direction.UP),
-                                ((2,4), Direction.DOWN),
-                                ((1,3), Direction.RIGHT)
+                    pushSeq = [ (512, Direction.LEFT), 
+                                (1024, Direction.LEFT),
+                                (2048, Direction.LEFT),
+                                (262144, Direction.DOWN),
+                                (131072, Direction.UP),
+                                (65536, Direction.DOWN),
+                                (16777216, Direction.RIGHT)
                             ]
-                    Description:
-                    1. Push box at 3,4 to the left
-                    2. Push box at 3,3 to the left (target)
-                    3. Push box at 3,2 to the left (final target)
-                    4. Push box at 2,2 down (final target)
-                    5. Push box at 2,3 up
-                    6. Push box at 2,4 down (final target)
-                    7. Push box at 1,3 to the right (final target)
+                    Description (The bottom right corner is index 1, with coordinates of (height, width)):
+                    1. Push box at 3,4 (512) to the left
+                    2. Push box at 3,3 (1024) to the left (target)
+                    3. Push box at 3,2 (2048) to the left (final target)
+                    4. Push box at 2,2 (262144) down (final target)
+                    5. Push box at 2,3 (131072) up
+                    6. Push box at 2,4 (65536) down (final target)
+                    7. Push box at 1,3 (16777216) to the right (final target)
             """
 
             #print(*pushSeq)
-            return boxPushesToMoves(pushSeq, player, boxes, walls, width, height, gameBox, leftColumn, rightColumn)
+            return boxPushesToMoves(pushSeq, player, boxes, walls)
         except Exception as ex:
             print(ex)
-            traceback.print_exc()
             return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
 
 
 
-def getPushMap(width, height, mapData, targetCoords):
+def getPushMap(walls, targets):
     """
     BFS from each target to each cell on the map to get the amount of pushes a coordinate needs to reach the nearest target
-    returns a bitmap (?) of the distance (in pushes) of each cell to a target
+    returns a look-up table of the distance (in pushes) of each cell to a target
 
     Example using testlevel:
           # # # # # #
@@ -174,33 +189,39 @@ def getPushMap(width, height, mapData, targetCoords):
         1,2 = pushes to the nearest target
     """
 
+    floor = walls ^ gameBox
+    # printBitMap(floor,width,height)
     pushCount = {}
-    queue = deque(targetCoords)
+    targetArray = getIndivBits(targets)
+    queue = deque(targetArray)
 
-    for target in targetCoords:
+    for target in targetArray:
         pushCount[target] = 0
 
     while queue:
-        r,c = queue.popleft()
+        pos = queue.popleft()
+        # print(bitToIndex(pos))
+        boxPos = 0
+        playerPos = 0
         for dir in Direction:
-            i,j = dir.row, dir.column
+            shift = shifts[dir]
+            if shift > 0:
+                boxPos = pos << shift
+                playerPos = boxPos << shift
+            else:
+                boxPos = pos >> -shift
+                playerPos = boxPos >> -shift
 
-            box = r-i, c-j       # box position
-            pos = r-2*i, c-2*j   # player position
+            isValid = boxPos & floor and playerPos & floor
 
-        isValid = isFloor(width,height,mapData,*box) and isFloor(width,height,mapData,*pos)
+            if isValid and boxPos not in pushCount:
+                pushCount[boxPos] = pushCount[pos] + 1
+                queue.append(boxPos)
 
-        if isValid and box not in pushCount:
-            pushCount[box] = pushCount[(r,c)] + 1
-            queue.append(box)
-
-    pushMap = [999] * (width * height)
-    for (r,c), pushCtr in pushCount.items():
-        pushMap[(height - (r+1)) * width + (width-(c+1))] = pushCtr
+    pushMap = [999] * (gwidth * gheight)
+    for pos, pushCtr in pushCount.items():
+        pushMap[bitToIndex(pos)] = pushCtr
     return pushMap
-
-def isFloor(width, height, mapData, r, c):
-    return 0 <= r < height and 0 <= c < width and mapData[r][c] != '#'
 
 #Helper Bit Functions
 def getBitIndices(bitmap):
@@ -235,6 +256,11 @@ def getIndivBits(bitmap):
         bitmap ^= lowestSetBit
     return indivBits
 
+def bitToIndex(bitmap):
+    """
+        Works like getBitIndices but for just 1 bitmap.
+    """
+    return (bitmap & -bitmap).bit_length()-1
 
 # Start of A* stuff
 class Node:
@@ -262,7 +288,7 @@ def totalManhattanDist(state,pushMap):
     """
         Equivalent normal loop
         total = 0
-        for box in getBitIndices(state.boxes):
+        for box in getIndivBits(state.boxes):
             #This is just getting the precomputed manhattan distance
             total += pushMap[box]
 
@@ -271,7 +297,7 @@ def totalManhattanDist(state,pushMap):
     #Alternate single line return
     return sum(pushMap[box] for box in getBitIndices(state.boxes))
 
-def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,initial,goal,targets):
+def Astar(walls,targetNum,pushMap,initial,goal,targets):
     """ 
     A* search algorithm
     returns the list of pushes needed in order to get to the goal state
@@ -285,15 +311,19 @@ def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,in
     explored = set()        # States already explored
 
     heapq.heappush(frontier,startNode)
-    deadCells = detectSimpleDeadlock(width, height, walls, gameBox, leftColumn, rightColumn, targets)
+    deadCells = detectSimpleDeadlock(walls, targets)
 
-    # TIME_LIMIT = 15
+    TIME_LIMIT = 15
     # startTime = time.monotonic()
+    count = 0
     while frontier:
+        count += 1
+        # print(count)
         # if time.monotonic() - startTime > TIME_LIMIT:
         #     print("Time Limit Reached")
+        #     print(count)
         #     break
-
+        floor = walls ^ gameBox
         curNode = heapq.heappop(frontier)
         curState = curNode.state
         fDic.remove(curState)
@@ -307,11 +337,23 @@ def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,in
                 pushes.append(node.push)
                 node = node.parent
             pushes.reverse()
-            print("Goal Reached")
+            print(f"Goal Reached {count}")
             return pushes
         
-        for push in getActions(walls, curState, deadCells, width, height, gameBox, leftColumn, rightColumn):
-            newState = createState(width,height,walls,curState,push, gameBox, leftColumn, rightColumn)
+        for push in getActions(walls, curState, deadCells, targets):
+            box, dir = push
+            """
+                Check the lookup table if the push direction is unknown.
+                Negative shifts dont turn into the shift into the other direction so an if else statement is needed to redirect it.
+            """
+            shift = shifts[dir]
+            movedBox = box << shift if shift > 0 else box >> -shift
+            newBoxes = curState.boxes ^ box ^ movedBox
+
+            if detectFrozenDeadlock(movedBox,newBoxes,walls,deadCells,targets):
+                continue
+            
+            newState = createState(walls,curState,push)
 
             if newState in explored:
                 continue
@@ -341,7 +383,7 @@ def Astar(width,height,walls,targetNum,gameBox,leftColumn,rightColumn,pushMap,in
 
 # End of A* stuff
 
-def getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightColumn, player):
+def getAccessibleArea(walls, boxes, player):
     """
         Breadth-First-Search Floodfill Algorithm.
         Returns a bitmap of the player's accessible area.
@@ -382,11 +424,9 @@ def getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightCol
     explored |= player
     
     while q:
-        #Bro i just highk realized that we don't need to check for wrapping to another row / going out of bounds cause the whole map should be surrounded by walls.
-        #But I will just keep it here just in case theres some edge case ig.
         pos = q.popleft()
         """
-            & gameBox ensures that moving the position a row up out of bounds results in 0.
+            & gameBox ensures that moving the position a row up out of bounds results in 0. Might not matter if all maps have walls
             Example:
                     010
             010     000
@@ -398,8 +438,8 @@ def getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightCol
             000  &  111  =  000
             000     111     000
         """
-        up = pos << width & gameBox
-        down = pos >> width & gameBox
+        up = pos << gwidth
+        down = pos >> gwidth
         """
             & (gameBox ^ rightColumn) ensures that if the left of the position wraps around to the right side, it results in 0 instead.
             Example:
@@ -415,8 +455,8 @@ def getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightCol
             It also guards against a position in the top left wrapping around into an out of bounds row above.
             gameBox ^ leftColumn works similarly but on the other side.
         """
-        left = pos << 1 & (gameBox ^ rightColumn)
-        right = pos >> 1 & (gameBox ^ leftColumn)
+        left = pos << 1
+        right = pos >> 1
 
         """
             This uses the bitwise AND operator to check if the target position, (up, down, left, right), are in the openArea (unblocked) and if they were already explored or not.
@@ -450,7 +490,69 @@ def getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightCol
 
     return explored
 
-def getActions(walls, currentState, deadCells, width, height, gameBox, leftColumn, rightColumn):
+def getCorral(accessible, walls, boxes):
+    #gets all positions that are not accessible, not a wall, and not a box
+    corralCells = gameBox ^ accessible ^ walls ^ boxes
+    separatedCells = getIndivBits(corralCells)
+
+    corralRegion = []
+    explored = 0
+
+    cellQ = deque()
+    corrals = []
+
+    for cell in separatedCells:
+        if cell & explored:
+            continue
+        area, boundary = 0, 0
+        cellQ.append(cell)
+        explored |= cell
+
+        while cellQ:
+            cell2 = cellQ.popleft()
+            area |= cell2
+            up = cell2 << gwidth
+            down = cell2 >> gwidth
+            left = cell2 << 1
+            right = cell2 >> 1
+
+            for n in (up, down, left, right):
+                if n & boxes:
+                    boundary |= n
+                elif not n & explored and n & corralCells:
+                    explored |= n
+                    cellQ.append(n)
+        corrals.append((area, boundary))
+
+    return corrals
+
+def isPI(area, boundary, accessible, blocked, deadCells, targets):
+    if (boundary & targets) == boundary and not area & targets:
+        return False
+
+    separatedBoundary = getIndivBits(boundary)
+    for box in separatedBoundary:
+        for direction in Direction:
+            shift = shifts[direction]
+            boxLandingPos, playerSide = 0, 0
+            if shift > 0:
+                boxLandingPos = box << shift
+                playerSide = box >> shift
+            else:
+                boxLandingPos = box >> -shift
+                playerSide = box << -shift
+
+            if boxLandingPos & area:
+                if not boxLandingPos & deadCells and not playerSide & accessible:
+                    return False
+
+            else:
+                if playerSide & accessible and not boxLandingPos & (blocked | deadCells):
+                    return False
+
+    return True
+
+def getActions(walls, currentState, deadCells, targets):
     """
         This returns the possible actions based on the accessible area.
         It checks the coordinates of each box and checks if those coordinates are within the range of the accesible area.
@@ -470,13 +572,20 @@ def getActions(walls, currentState, deadCells, width, height, gameBox, leftColum
     
     blocked = walls | currentState.boxes | deadCells
     accessible = currentState.playerAccess
+    corrals = getCorral(accessible, walls, currentState.boxes)
+
+    candidateBoxes = getIndivBits(currentState.boxes)
+
+    for area, boundary in corrals:
+        if isPI(area, boundary, accessible, blocked, deadCells, targets):
+            candidateBoxes = getIndivBits(boundary)
+            break
     
-    
-    for box in getIndivBits(currentState.boxes):
-        up = box << width & gameBox
-        down = box >> width & gameBox
-        left = box << 1 & (gameBox ^ rightColumn)
-        right = box >> 1 & (gameBox ^ leftColumn)
+    for box in candidateBoxes:
+        up = box << gwidth
+        down = box >> gwidth
+        left = box << 1
+        right = box >> 1 
         #The accesible coordinates is the position beside the box at the opposite direction of the push
         #Up push means check if accesible from the free position at down of the box
 
@@ -495,7 +604,7 @@ def getActions(walls, currentState, deadCells, width, height, gameBox, leftColum
     
     return actionSet
 
-def detectSimpleDeadlock(width, height, walls, gameBox, leftColumn, rightColumn, targets):
+def detectSimpleDeadlock(walls, targets):
     """
         Algorithm used here is a reverse search wherein a box is placed in the targets and a "player" attempts to pull.
         If a player was able to pull, its a good square, if not then its a dead square.
@@ -517,18 +626,18 @@ def detectSimpleDeadlock(width, height, walls, gameBox, leftColumn, rightColumn,
             You can look up the explanation to this in getAccessible Area.
             direction (1) is boxPullPos
         """
-        up = box << width & gameBox
+        up = box << gwidth
         """
             These player{Direction} ones just repeat the shift one more time.
             playerDirection (2) is playerPullPos
         """
-        playerUp = up << width & gameBox
-        down = box >> width & gameBox
-        playerDown = down >> width & gameBox
-        left = box << 1 & (gameBox ^ rightColumn)
-        playerLeft = left << 1 & (gameBox ^ rightColumn)
-        right = box >> 1 & (gameBox ^ leftColumn)
-        playerRight = right >> 1 & (gameBox ^ leftColumn)
+        playerUp = up << gwidth
+        down = box >> gwidth
+        playerDown = down >> gwidth
+        left = box << 1
+        playerLeft = left << 1
+        right = box >> 1
+        playerRight = right >> 1
 
         directions = [(up,playerUp),(down,playerDown),(left,playerLeft),(right,playerRight)]
 
@@ -561,7 +670,46 @@ def detectSimpleDeadlock(width, height, walls, gameBox, leftColumn, rightColumn,
     # Returns every dead square
     return goodCell^gameBox
 
-def createState(width, height, walls, exploring, action, gameBox, leftColumn, rightColumn):
+def isFrozen(box, boxes, walls, deadCells, checking):
+    checking |= box
+    blocked = walls | checking
+
+    """
+        Don't use lookup table for shifts if you need them all, just hardcode it.
+    """
+    up = box << gwidth
+    down = box >> gwidth
+    left = box << 1
+    right = box >> 1
+
+    horizontalBlock = ((left | right) & blocked
+                        or (left & deadCells and right & deadCells)
+                        or (left & boxes and isFrozen(left,boxes,walls,deadCells,checking))
+                        or (right & boxes and isFrozen(right,boxes,walls,deadCells,checking))
+                    )
+    verticalBlock = ((up | down) & blocked
+                        or (up & deadCells and down & deadCells)
+                        or (up & boxes and isFrozen(up,boxes,walls,deadCells,checking))
+                        or (down & boxes and isFrozen(down,boxes,walls,deadCells,checking))
+                    )
+    return horizontalBlock and verticalBlock
+
+def detectFrozenDeadlock(movedBox, boxes, walls, deadCells, targets):
+    toCheck = [movedBox]
+
+    for dir in Direction:
+        shift = shifts[dir]
+        neighbor = movedBox << shift if shift > 0 else movedBox >> -shift
+        if neighbor & boxes:
+            toCheck.append(neighbor)
+
+    for box in toCheck:
+        checking = 0
+        if not box & targets and isFrozen(box,boxes,walls,deadCells,checking):
+            return True
+    return False
+
+def createState(walls, exploring, action):
     """
         Creates a new state given the current state and the given action.
     """
@@ -575,23 +723,23 @@ def createState(width, height, walls, exploring, action, gameBox, leftColumn, ri
     #Alternatively, we could feed this the new box position instead of the direction later, but that might make other things confusing down the line.
     match (direction):
         case Direction.UP:
-            boxes |= targetBox << width & gameBox
+            boxes |= targetBox << gwidth
         case Direction.DOWN:
-            boxes |= targetBox >> width & gameBox
+            boxes |= targetBox >> gwidth
         case Direction.LEFT:
-            boxes |= targetBox << 1 & (gameBox ^ rightColumn)
+            boxes |= targetBox << 1
         case Direction.RIGHT:
-            boxes |= targetBox >> 1 & (gameBox ^ leftColumn)
+            boxes |= targetBox >> 1
 
     #Player should be standing in the opposite direction of where they pushed the box, so we can call the search here
     #Actually, the player could also be standing where they just pushed the box from, simpler to just call the search there actually.
     player = targetBox
 
-    playerAccess = getAccessibleArea(width, height, walls, boxes, gameBox, leftColumn, rightColumn, player)   #Flood fill algorithm, could find a faster one
+    playerAccess = getAccessibleArea(walls, boxes, player)   #Flood fill algorithm, could find a faster one
 
     return State(boxes,playerAccess)
 
-def findPath(start, goal, walls, boxes, width, height, gameBox, leftColumn, rightColumn):
+def findPath(start, goal, walls, boxes):
     """
         This finds the path from player start position to goal position using BFS (path for EACH box).
         for context: the goal position is the position beside the box opposite of the direction of the push.
@@ -617,16 +765,8 @@ def findPath(start, goal, walls, boxes, width, height, gameBox, leftColumn, righ
 
         for direction in Direction:
             # calculates the new position based on the current position and the direction of movement
-            newPos = 0
-            match (direction):
-                case Direction.UP:
-                    newPos = currPos << width & gameBox
-                case Direction.DOWN:
-                    newPos = currPos >> width & gameBox
-                case Direction.LEFT:
-                    newPos = currPos << 1 & (gameBox ^ rightColumn)
-                case Direction.RIGHT:
-                    newPos = currPos >> 1 & (gameBox ^ leftColumn)
+            shift = shifts[direction]
+            newPos = currPos << shift if shift > 0 else currPos >> -shift
 
             if newPos & blocked or newPos & cameFromMap:
                 continue
@@ -667,7 +807,7 @@ def reconstructPath(cameFrom, start, goal):
     # reverses the path string to get the correct order from start to goal 
     return path[::-1]
 
-def boxPushesToMoves(pushSeq, player, boxes, walls, width, height, gameBox, leftColumn, rightColumn):
+def boxPushesToMoves(pushSeq, player, boxes, walls):
     """
         This function takes the push sequence (basically, the single final push to get the box to the target) 
         from A* and converts it into a string of moves for the player to execute
@@ -685,15 +825,15 @@ def boxPushesToMoves(pushSeq, player, boxes, walls, width, height, gameBox, left
         playerReadyPos = 0
         match (direction):
             case Direction.DOWN:
-                playerReadyPos = boxGoal << width & gameBox
+                playerReadyPos = boxGoal << gwidth
             case Direction.UP:
-                playerReadyPos = boxGoal >> width & gameBox
+                playerReadyPos = boxGoal >> gwidth
             case Direction.RIGHT:
-                playerReadyPos = boxGoal << 1 & (gameBox ^ rightColumn)
+                playerReadyPos = boxGoal << 1
             case Direction.LEFT:
-                playerReadyPos = boxGoal >> 1 & (gameBox ^ leftColumn)
+                playerReadyPos = boxGoal >> 1
 
-        moves += findPath(player, playerReadyPos, walls, currentBoxes, width, height, gameBox, leftColumn, rightColumn)
+        moves += findPath(player, playerReadyPos, walls, currentBoxes)
         # adds extra letter to string for the actual push to target
         moves += LETTERS[direction]
         # player assumes old pos of box after push
@@ -702,15 +842,17 @@ def boxPushesToMoves(pushSeq, player, boxes, walls, width, height, gameBox, left
         # box is now in the new position
         match (direction):
             case Direction.UP:
-                currentBoxes |= boxGoal << width & gameBox
+                currentBoxes |= boxGoal << gwidth
             case Direction.DOWN:
-                currentBoxes |= boxGoal >> width & gameBox
+                currentBoxes |= boxGoal >> gwidth
             case Direction.LEFT:
-                currentBoxes |= boxGoal << 1 & (gameBox ^ rightColumn)
+                currentBoxes |= boxGoal << 1
             case Direction.RIGHT:
-                currentBoxes |= boxGoal >> 1 & (gameBox ^ leftColumn)
+                currentBoxes |= boxGoal >> 1
 
     return moves
+
+
 
 #For testing
 def printGrid(grid):
@@ -719,17 +861,17 @@ def printGrid(grid):
             print(grid[x][y], end="")
         print()
 
-def printBitMap(bitmap, width, height, display='X'):
-    n = width * height
-    for r in range(height):
+def printBitMap(bitmap, display='X'):
+    n = gwidth * gheight
+    for r in range(gheight):
         print("".join(
-            display if (bitmap >> (n - 1 - (r * width + c))) & 1 else "."
-            for c in range(width)
+            display if (bitmap >> (n - 1 - (r * gwidth + c))) & 1 else "."
+            for c in range(gwidth)
         ))
     print()
 
-def printBitMap2(bitmap, width, height, display = 'X'):
-    for r in range(height):
-        print("".join(display if (bitmap >> (r * width + c)) & 1 else "." for c in range(width)))
+def printBitMap2(bitmap, display = 'X'):
+    for r in range(gheight):
+        print("".join(display if (bitmap >> (r * gwidth + c)) & 1 else "." for c in range(gwidth)))
     print()
 
