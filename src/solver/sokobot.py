@@ -30,7 +30,7 @@ LETTERS = {
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
-            useBitMapVersion = False
+            useBitMapVersion = True
             if(useBitMapVersion):
                 tempObj = SokoBit()
                 return tempObj.solveSokobanPuzzle(width, height, mapData, itemsData)
@@ -406,21 +406,25 @@ def getActions(walls, currentState, deadCells, width, height, targets):
         #Up push means check if accesible from the free position at down of the box
 
         #Up Push. box[0] + 1][box[1] is the coordinates of down. same with the other directions
-        up_frozen = detectFrozenDeadlock(up, (currentState.boxes - {box}).union({up}), walls, deadCells, targets)
-        if accessible[box[0] + 1][box[1]] and up not in blocked and up not in deadCells and not up_frozen:
-            actionSet.add((box,Direction.UP))
+        if accessible[box[0] + 1][box[1]] and up not in blocked and up not in deadCells:
+            up_frozen = detectFrozenDeadlock(up, (currentState.boxes - {box}).union({up}), walls, deadCells, targets)
+            if not up_frozen:
+                actionSet.add((box,Direction.UP))
         #Down Push
-        down_frozen = detectFrozenDeadlock(down, (currentState.boxes - {box}).union({down}), walls, deadCells, targets)
-        if accessible[box[0] - 1][box[1]] and down not in blocked and down not in deadCells and not down_frozen:
-            actionSet.add((box,Direction.DOWN))
+        if accessible[box[0] - 1][box[1]] and down not in blocked and down not in deadCells:
+            down_frozen = detectFrozenDeadlock(down, (currentState.boxes - {box}).union({down}), walls, deadCells, targets)
+            if not down_frozen:
+                actionSet.add((box,Direction.DOWN))
         #Left Push
-        left_frozen = detectFrozenDeadlock(left, (currentState.boxes - {box}).union({left}), walls, deadCells, targets)
-        if accessible[box[0]][box[1]+1] and left not in blocked and left not in deadCells and not left_frozen:
-            actionSet.add((box,Direction.LEFT))
+        if accessible[box[0]][box[1]+1] and left not in blocked and left not in deadCells:
+            left_frozen = detectFrozenDeadlock(left, (currentState.boxes - {box}).union({left}), walls, deadCells, targets)
+            if not left_frozen:
+                actionSet.add((box,Direction.LEFT))
         #Right Push
-        right_frozen = detectFrozenDeadlock(right, (currentState.boxes - {box}).union({right}), walls, deadCells, targets)
-        if accessible[box[0]][box[1]-1] and right not in blocked and right not in deadCells and not right_frozen:
-            actionSet.add((box,Direction.RIGHT))
+        if accessible[box[0]][box[1]-1] and right not in blocked and right not in deadCells:
+            right_frozen = detectFrozenDeadlock(right, (currentState.boxes - {box}).union({right}), walls, deadCells, targets)
+            if not right_frozen:
+                actionSet.add((box,Direction.RIGHT))
     
     return actionSet
 

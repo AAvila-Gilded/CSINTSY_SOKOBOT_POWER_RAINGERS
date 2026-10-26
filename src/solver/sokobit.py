@@ -340,19 +340,7 @@ def Astar(walls,targetNum,pushMap,initial,goal,targets):
             print(f"Goal Reached {count}")
             return pushes
         
-        for push in getActions(walls, curState, deadCells, targets):
-            box, dir = push
-            """
-                Check the lookup table if the push direction is unknown.
-                Negative shifts dont turn into the shift into the other direction so an if else statement is needed to redirect it.
-            """
-            shift = shifts[dir]
-            movedBox = box << shift if shift > 0 else box >> -shift
-            newBoxes = curState.boxes ^ box ^ movedBox
-
-            if detectFrozenDeadlock(movedBox,newBoxes,walls,deadCells,targets):
-                continue
-            
+        for push in getActions(walls, curState, deadCells, targets):            
             newState = createState(walls,curState,push)
 
             if newState in explored:
@@ -575,6 +563,7 @@ def getActions(walls, currentState, deadCells, targets):
     corrals = getCorral(accessible, walls, currentState.boxes)
 
     candidateBoxes = getIndivBits(currentState.boxes)
+    boxes = currentState.boxes
 
     for area, boundary in corrals:
         if isPI(area, boundary, accessible, blocked, deadCells, targets):
@@ -591,16 +580,24 @@ def getActions(walls, currentState, deadCells, targets):
 
         #Up Push. box[0] + 1][box[1] is the coordinates of down. same with the other directions
         if down & accessible and not up & blocked:
-            actionSet.add((box,Direction.UP))
+            up_frozen = detectFrozenDeadlock(up, boxes ^ box ^ up, walls, deadCells, targets)
+            if not up_frozen:
+                actionSet.add((box,Direction.UP))
         #Down Push
         if up & accessible and not down & blocked:
-            actionSet.add((box,Direction.DOWN))
+            down_frozen = detectFrozenDeadlock(down, boxes ^ box ^ down, walls, deadCells, targets)
+            if not down_frozen:
+                actionSet.add((box,Direction.DOWN))
         #Left Push
         if right & accessible and not left & blocked:
-            actionSet.add((box,Direction.LEFT))
+            left_frozen = detectFrozenDeadlock(left, boxes ^ box ^ left, walls, deadCells, targets)
+            if not left_frozen:
+                actionSet.add((box,Direction.LEFT))
         #Right Push
         if left & accessible and not right & blocked:
-            actionSet.add((box,Direction.RIGHT))
+            right_frozen = detectFrozenDeadlock(right, boxes ^ box ^ right, walls, deadCells, targets)
+            if not right_frozen:
+                actionSet.add((box,Direction.RIGHT))
     
     return actionSet
 
