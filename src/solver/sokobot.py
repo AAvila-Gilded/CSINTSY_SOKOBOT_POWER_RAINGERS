@@ -29,7 +29,7 @@ LETTERS = {
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
-            useBitMapVersion = False
+            useBitMapVersion = True
             if(useBitMapVersion):
                 tempObj = SokoBit()
                 return tempObj.solveSokobanPuzzle(width, height, mapData, itemsData)
@@ -198,7 +198,7 @@ def Astar(width,height,walls,initial, goal, targets, pushMap):
     count = 0
     while frontier:
         count += 1
-        #print(count)
+        # print(count)
         # if time.monotonic() - startTime > TIME_LIMIT:
         #     print("Time Limit Reached")
         #     break
@@ -217,7 +217,7 @@ def Astar(width,height,walls,initial, goal, targets, pushMap):
                 pushes.append(node.push)
                 node = node.parent
             pushes.reverse()
-            print("Goal Reached")
+            print(f"Goal Reached {count}")
             return pushes
         
         for push in getActions(walls, curState, deadCells, width, height, targets):

@@ -314,15 +314,15 @@ def Astar(walls,targetNum,pushMap,initial,goal,targets):
     deadCells = detectSimpleDeadlock(walls, targets)
 
     TIME_LIMIT = 15
-    startTime = time.monotonic()
+    # startTime = time.monotonic()
     count = 0
     while frontier:
         count += 1
         # print(count)
-        if time.monotonic() - startTime > TIME_LIMIT:
-            print("Time Limit Reached")
-            print(count)
-            break
+        # if time.monotonic() - startTime > TIME_LIMIT:
+        #     print("Time Limit Reached")
+        #     print(count)
+        #     break
         floor = walls ^ gameBox
         curNode = heapq.heappop(frontier)
         curState = curNode.state
@@ -337,10 +337,10 @@ def Astar(walls,targetNum,pushMap,initial,goal,targets):
                 pushes.append(node.push)
                 node = node.parent
             pushes.reverse()
-            print("Goal Reached")
+            print(f"Goal Reached {count}")
             return pushes
         
-        for push in getActions(walls, curState, deadCells):
+        for push in getActions(walls, curState, deadCells, targets):
             box, dir = push
             """
                 Check the lookup table if the push direction is unknown.
@@ -490,7 +490,69 @@ def getAccessibleArea(walls, boxes, player):
 
     return explored
 
-def getActions(walls, currentState, deadCells):
+def getCorral(accessible, walls, boxes):
+    #gets all positions that are not accessible, not a wall, and not a box
+    corralCells = gameBox ^ accessible ^ walls ^ boxes
+    separatedCells = getIndivBits(corralCells)
+
+    corralRegion = []
+    explored = 0
+
+    cellQ = deque()
+    corrals = []
+
+    for cell in separatedCells:
+        if cell & explored:
+            continue
+        area, boundary = 0, 0
+        cellQ.append(cell)
+        explored |= cell
+
+        while cellQ:
+            cell2 = cellQ.popleft()
+            area |= cell2
+            up = cell2 << gwidth
+            down = cell2 >> gwidth
+            left = cell2 << 1
+            right = cell2 >> 1
+
+            for n in (up, down, left, right):
+                if n & boxes:
+                    boundary |= n
+                elif not n & explored and n & corralCells:
+                    explored |= n
+                    cellQ.append(n)
+        corrals.append((area, boundary))
+
+    return corrals
+
+def isPI(area, boundary, accessible, blocked, deadCells, targets):
+    if (boundary & targets) == boundary and not area & targets:
+        return False
+
+    separatedBoundary = getIndivBits(boundary)
+    for box in separatedBoundary:
+        for direction in Direction:
+            shift = shifts[direction]
+            boxLandingPos, playerSide = 0, 0
+            if shift > 0:
+                boxLandingPos = box << shift
+                playerSide = box >> shift
+            else:
+                boxLandingPos = box >> -shift
+                playerSide = box << -shift
+
+            if boxLandingPos & area:
+                if not boxLandingPos & deadCells and not playerSide & accessible:
+                    return False
+
+            else:
+                if playerSide & accessible and not boxLandingPos & (blocked | deadCells):
+                    return False
+
+    return True
+
+def getActions(walls, currentState, deadCells, targets):
     """
         This returns the possible actions based on the accessible area.
         It checks the coordinates of each box and checks if those coordinates are within the range of the accesible area.
@@ -510,9 +572,16 @@ def getActions(walls, currentState, deadCells):
     
     blocked = walls | currentState.boxes | deadCells
     accessible = currentState.playerAccess
+    corrals = getCorral(accessible, walls, currentState.boxes)
+
+    candidateBoxes = getIndivBits(currentState.boxes)
+
+    for area, boundary in corrals:
+        if isPI(area, boundary, accessible, blocked, deadCells, targets):
+            candidateBoxes = getIndivBits(boundary)
+            break
     
-    
-    for box in getIndivBits(currentState.boxes):
+    for box in candidateBoxes:
         up = box << gwidth
         down = box >> gwidth
         left = box << 1
