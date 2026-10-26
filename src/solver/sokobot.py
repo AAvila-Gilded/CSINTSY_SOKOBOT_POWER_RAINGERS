@@ -29,7 +29,7 @@ LETTERS = {
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
         try:
-            useBitMapVersion = False
+            useBitMapVersion = True
             if(useBitMapVersion):
                 tempObj = SokoBit()
                 return tempObj.solveSokobanPuzzle(width, height, mapData, itemsData)
@@ -61,8 +61,10 @@ class SokoBot:
             initial = State(boxes, playerAccess)
             goal = State(targets, playerAccess)
 
+            pushMap = getPushMap(width, height, mapData, targets)
+
             # push sequence - the sequence of pushes from the start to the goal
-            pushSeq = Astar(width,height,walls,initial,goal,targets)
+            pushSeq = Astar(width,height,walls,initial,goal,targets,pushMap)
             """
             pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
             Output format is such: [((row, col), Direction)]
@@ -111,7 +113,54 @@ class Node:
         # Tie-breaking rule for the priority queue based on total
         return self.total < other.total
 
-    
+def getPushMap(width, height, mapData, targetCoords):
+    """
+    BFS from each target to each cell on the map to get the amount of pushes a coordinate needs to reach the nearest target
+    returns a bitmap (?) of the distance (in pushes) of each cell to a target
+
+    Example using testlevel:
+          # # # # # #
+          # x 1 0 x #
+        # # 1 2 1 x #
+        # 0 0 1 0 x #
+        # # # # # # #
+
+        0 = target
+        x = deadlock
+        1,2 = pushes to the nearest target
+    """
+
+    pushCount = {}
+    queue = deque(targetCoords)
+
+    for target in targetCoords:
+        pushCount[target] = 0
+
+    while queue:
+        r,c = queue.popleft()
+        for dir in Direction:
+            i,j = dir.row, dir.column
+
+            box = r-i, c-j       # box position
+            pos = r-2*i, c-2*j   # player position
+
+            isValid = isFloor(width,height,mapData,*box) and isFloor(width,height,mapData,*pos)
+
+            if isValid and box not in pushCount:
+                pushCount[box] = pushCount[(r,c)] + 1
+                queue.append(box)
+
+    pushMap = [999] * (width * height)
+    for (r,c), pushCtr in pushCount.items():
+        pushMap[(height - (r+1)) * width + (width-(c+1))] = pushCtr
+    return pushMap
+
+def isFloor(width, height, mapData, r, c):
+    return 0 <= r < height and 0 <= c < width and mapData[r][c] != '#'
+
+def pushManHattan(state, pushMap, width, height):
+    return sum(pushMap[(height - (r+1)) * width + (width-(c+1))] for r, c in state.boxes)
+
 def totalManhattanDist(state,targets):
     """
     The sum of the manhattan distance of each box to its nearest target.
@@ -124,7 +173,7 @@ def totalManhattanDist(state,targets):
 
     return total
 
-def Astar(width,height,walls,initial, goal, targets):
+def Astar(width,height,walls,initial, goal, targets, pushMap):
     """ 
     A* search algorithm
     returns the list of pushes needed in order to get to the goal state
@@ -148,10 +197,8 @@ def Astar(width,height,walls,initial, goal, targets):
     # startTime = time.monotonic()
     count = 0
     while frontier:
-
-          
         count += 1
-        #print(count)
+        # print(count)
         # if time.monotonic() - startTime > TIME_LIMIT:
         #     print("Time Limit Reached")
         #     break
@@ -170,7 +217,7 @@ def Astar(width,height,walls,initial, goal, targets):
                 pushes.append(node.push)
                 node = node.parent
             pushes.reverse()
-            print("Goal Reached")
+            print(f"Goal Reached {count}")
             return pushes
         
         for push in getActions(walls, curState, deadCells, width, height, targets):
@@ -196,7 +243,9 @@ def Astar(width,height,walls,initial, goal, targets):
                 newNode = Node(newState,curNode,push)
                 newNode.cost = curCost
                 # can compute push cost between box and target for all targets use that as new heuristic?
-                newNode.heuristic = totalManhattanDist(newState,targets)
+                # newNode.heuristic = totalManhattanDist(newState,targets)
+                # use revisedlookup
+                newNode.heuristic = pushManHattan(newState,pushMap,width,height)
                 newNode.total = newNode.cost + newNode.heuristic
 
                 heapq.heappush(frontier,newNode)

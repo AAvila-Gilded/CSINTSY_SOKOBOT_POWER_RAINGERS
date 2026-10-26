@@ -5,6 +5,7 @@ class State:
     def __init__(self, boxes, playerAccess):
         self.boxes = boxes
         self.playerAccess = playerAccess
+        # self.hash = hash((self.boxes,self.playerAccess))
 
     #Equality Override, States are equal if they have the same set of Boxes and PlayerAccess
     def __eq__(self, other):
@@ -35,6 +36,7 @@ class State:
 
     #Hash Override, sets the hash to use the tuple of box coordinates and player access.
     def __hash__(self):
+        # return self.hash
         return hash((self.boxes,self.playerAccess))
 
 
