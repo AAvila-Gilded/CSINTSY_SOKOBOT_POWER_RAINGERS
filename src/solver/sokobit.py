@@ -300,7 +300,11 @@ class Node:
 
     def __lt__(self,other):
         # Tie-breaking rule for the priority queue based on total
-        return self.total < other.total
+        if self.total != other.total:
+            return self.total < other.total
+        
+        # if same total, check the one closer to the goal.
+        return self.heuristic < other.heuristic 
 
 def totalManhattanDist(state,pushMap):
     """
