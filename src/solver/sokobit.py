@@ -1,6 +1,8 @@
 import time, heapq
 from .helperBit import State, Direction
 from collections import deque
+from scipy.optimize import linear_sum_assignment
+import traceback
 
 #TO DO:
 #Get a way to generate actions from a state
@@ -30,6 +32,7 @@ shifts = {
 gwidth = -1
 gheight = -1
 gameBox = -1
+useHungarian = True
 
 class SokoBit:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
@@ -137,7 +140,8 @@ class SokoBit:
             goal = State(targets, playerAccess)
 
             # push sequence - the sequence of pushes from the start to the goal
-            pushSeq = Astar(walls,targetNum,pushMap,initial,goal,targets)
+            targetPushMaps = getTargetPushMaps(walls, targets)
+            pushSeq = Astar(walls,targetNum,pushMap,initial,goal,targets,targetPushMaps)
             # print(pushSeq)
             """
                 pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
@@ -168,6 +172,7 @@ class SokoBit:
             return boxPushesToMoves(pushSeq, player, boxes, walls)
         except Exception as ex:
             print(ex)
+            traceback.print_exc()
             return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
 
 
@@ -222,6 +227,24 @@ def getPushMap(walls, targets):
     for pos, pushCtr in pushCount.items():
         pushMap[bitToIndex(pos)] = pushCtr
     return pushMap
+
+def getTargetPushMaps(walls, targets):
+    targetBits = getIndivBits(targets)
+    return [getPushMap(walls,t) for t in targetBits]
+
+def getHungarian(targetPushMaps,boxes):
+    boxBits = getBitIndices(boxes)
+    cost = [[m[bitmap] for m in targetPushMaps] for bitmap in boxBits]
+    row, col= linear_sum_assignment(cost)
+
+    total = 0
+    for k in range(len(row)):
+        c = cost[row[k]][col[k]]
+        if c >= 999:
+            return 999
+        total += c
+
+    return total
 
 #Helper Bit Functions
 def getBitIndices(bitmap):
@@ -297,13 +320,17 @@ def totalManhattanDist(state,pushMap):
     #Alternate single line return
     return sum(pushMap[box] for box in getBitIndices(state.boxes))
 
-def Astar(walls,targetNum,pushMap,initial,goal,targets):
+def Astar(walls,targetNum,pushMap,initial,goal,targets,targetPushMaps):
     """ 
     A* search algorithm
     returns the list of pushes needed in order to get to the goal state
     """
     startNode = Node(initial)
-    startNode.heuristic = totalManhattanDist(initial,pushMap)
+    startNode.heuristic = 0
+    if useHungarian:
+        startNode.heuristic = getHungarian(targetPushMaps,initial.boxes)
+    else:
+        startNode.heuristic = totalManhattanDist(initial,pushMap)
     startNode.total = startNode.heuristic
 
     frontier = []           # Priority queue of nodes waiting to be explored
@@ -352,7 +379,10 @@ def Astar(walls,targetNum,pushMap,initial,goal,targets):
             if newState not in fDic:
                 newNode = Node(newState,curNode,push)
                 newNode.cost = curCost
-                newNode.heuristic = totalManhattanDist(newState,pushMap)
+                if useHungarian:
+                    newNode.heuristic = getHungarian(targetPushMaps,newState.boxes)
+                else:
+                    newNode.heuristic = totalManhattanDist(newState,pushMap)
                 newNode.total = newNode.cost + newNode.heuristic
 
                 heapq.heappush(frontier,newNode)
