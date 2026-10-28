@@ -3,6 +3,7 @@ from .helperStructures import State, Direction
 from .sokobit import SokoBit
 from collections import deque
 from scipy.optimize import linear_sum_assignment
+# import traceback
 
 # python -m src.main.driver 14 bot
 
@@ -26,6 +27,8 @@ LETTERS = {
     Direction.LEFT: 'l',
     Direction.RIGHT: 'r'
 }
+
+useHungarian = True
 
 class SokoBot:
     def solveSokobanPuzzle(self, width, height, mapData, itemsData):
@@ -66,7 +69,7 @@ class SokoBot:
 
             # push sequence - the sequence of pushes from the start to the goal
             targetPushMaps = getTargetPushMaps(width,height,mapData,targets)
-            pushSeq = Astar(width,height,walls,initial,goal,targets,targetPushMaps)
+            pushSeq = Astar(width,height,walls,initial,goal,targets,targetPushMaps,pushMap)
             """
             pushSeq (or the A* search) returns a list of pushes needed to reach the solution.
             Output format is such: [((row, col), Direction)]
@@ -96,6 +99,7 @@ class SokoBot:
 
         except Exception as ex:
             print(ex)
+            # traceback.print_exc
         return boxPushesToMoves(pushSeq, player, boxes, walls)
 
 def getPushMap(width, height, mapData, targetCoords):
@@ -140,6 +144,9 @@ def getPushMap(width, height, mapData, targetCoords):
         pushMap[(height - (r+1)) * width + (width-(c+1))] = pushCtr
     return pushMap
 
+def pushManHattan(state, pushMap, width, height):
+    return sum(pushMap[(height - (r+1)) * width + (width-(c+1))] for r, c in state.boxes)
+
 def isFloor(width, height, mapData, r, c):
     return 0 <= r < height and 0 <= c < width and mapData[r][c] != '#'
 
@@ -176,13 +183,17 @@ def getHungarian(targetPushMaps, boxes, height, width):
     
     return total
 
-def Astar(width,height,walls,initial, goal, targets,targetPushMaps):
+def Astar(width,height,walls,initial, goal, targets,targetPushMaps, pushMap):
     """ 
     A* search algorithm
     returns the list of pushes needed in order to get to the goal state
     """
     startNode = Node(initial)
-    startNode.heuristic = getHungarian(targetPushMaps,initial.boxes,height,width)
+    startNode.heuristic = 0
+    if useHungarian:
+        startNode.heuristic = getHungarian(targetPushMaps,initial.boxes,height,width)
+    else:
+        startNode.heuristic = pushManHattan(initial, pushMap, width, height)
     startNode.total = startNode.heuristic
 
     frontier = []           # Priority queue of nodes waiting to be explored
@@ -219,7 +230,7 @@ def Astar(width,height,walls,initial, goal, targets,targetPushMaps):
                 pushes.append(node.push)
                 node = node.parent
             pushes.reverse()
-            print(f"Goal Reached {count}")
+            print(f"Goal Reached {count} {len(frontier)}")
             return pushes
         
         for push in getActions(walls, curState, deadCells, width, height, targets):
@@ -234,7 +245,11 @@ def Astar(width,height,walls,initial, goal, targets,targetPushMaps):
                 newNode = Node(newState,curNode,push)
                 newNode.cost = curCost
                 # can compute push cost between box and target for all targets use that as new heuristic?
-                newNode.heuristic = getHungarian(targetPushMaps,newState.boxes,height,width)
+                newNode.heuristic = 0
+                if useHungarian:
+                    newNode.heuristic = getHungarian(targetPushMaps,newState.boxes,height,width)
+                else:
+                    newNode.heuristic = pushManHattan(newState, pushMap, width, height)
                 newNode.total = newNode.cost + newNode.heuristic
 
                 heapq.heappush(frontier,newNode)

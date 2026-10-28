@@ -2,7 +2,7 @@ import time, heapq
 from .helperBit import State, Direction
 from collections import deque
 from scipy.optimize import linear_sum_assignment
-import traceback
+# import traceback
 
 #TO DO:
 #Get a way to generate actions from a state
@@ -172,7 +172,7 @@ class SokoBit:
             return boxPushesToMoves(pushSeq, player, boxes, walls)
         except Exception as ex:
             print(ex)
-            traceback.print_exc()
+            # traceback.print_exc()
             return "lrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlrlr"
 
 
@@ -364,7 +364,7 @@ def Astar(walls,targetNum,pushMap,initial,goal,targets,targetPushMaps):
                 pushes.append(node.push)
                 node = node.parent
             pushes.reverse()
-            print(f"Goal Reached {count}")
+            print(f"Goal Reached {count} {len(frontier)}")
             return pushes
         
         for push in getActions(walls, curState, deadCells, targets):            
@@ -379,6 +379,7 @@ def Astar(walls,targetNum,pushMap,initial,goal,targets,targetPushMaps):
             if newState not in fDic:
                 newNode = Node(newState,curNode,push)
                 newNode.cost = curCost
+                newNode.heuristic = 0
                 if useHungarian:
                     newNode.heuristic = getHungarian(targetPushMaps,newState.boxes)
                 else:
